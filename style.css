@@ -6,9 +6,8 @@
    ================================================================ */
 
 :root {
-  /* match scene.background = 0xcfe8f5 exactly for seamless blend */
-  --sky:     #cfe8f5;
-  --knob:    #1c1a18;   /* near-black knob face */
+  --sky:     #ffffff;
+  --knob:    #2a2420;   /* dark warm brown */
   --notch:   #d4830a;   /* amber indicator */
   --text:    #1a1614;   /* near-black labels */
   --text-dim:#6a5c50;   /* dimmed values */
@@ -32,9 +31,10 @@ html, body {
 #plugin {
   width: 880px; height: 480px;
   display: flex; flex-direction: column;
-  background: var(--sky);    /* seamless with 3D sky */
+  background: var(--sky);
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.08);
 }
 
 /* ── 3D Viewport ──────────────────────────────────────────────── */
@@ -95,9 +95,10 @@ html, body {
 .knob-svg {
   width: 56px; height: 56px;
   display: block;
-  touch-action: none;    /* critical for pointer capture on mobile/trackpad */
+  touch-action: none;
   cursor: ns-resize;
   overflow: visible;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.30));
 }
 
 /* Knob body — filled dark circle */
@@ -105,12 +106,11 @@ html, body {
   fill: var(--knob);
 }
 
-/* Notch indicator — rotates around centre (30,30) */
+/* Notch indicator — rotated ONLY via SVG transform attribute in JS.
+   DO NOT add CSS transform here — CSS overrides SVG presentation
+   attributes and would prevent setAttribute('transform',…) from working. */
 .k-notch {
   fill: var(--notch);
-  /* default at v=0: rotate(-135 30 30) = bottom-left position */
-  transform: rotate(-135deg);
-  transform-origin: 30px 30px;
 }
 
 /* Active state while dragging */

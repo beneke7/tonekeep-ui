@@ -116,7 +116,7 @@ renderer.localClippingEnabled = true;
 // SCENE + CAMERA
 // ────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xcfe8f5);
+scene.background = new THREE.Color(0xffffff);
 
 const camera = new THREE.PerspectiveCamera(CFG.CAM_FOV, 1, CFG.CAM_NEAR, CFG.CAM_FAR);
 camera.position.set(...CFG.CAM_POS);
@@ -388,8 +388,8 @@ function updateFluidDisplacement(timeMs) {
     const x = topOrigXZ[ii * 2];
     const z = topOrigXZ[ii * 2 + 1];
 
-    // Idle ripple — always on, makes water feel alive even at thump=0
-    const idle  = Math.sin(x * 1.6 + t * 0.38) * Math.cos(z * 1.4 + t * 0.30) * 0.008;
+    // Idle ripple — always on; 0.045 local ≈ 3% of fill height, clearly visible
+    const idle  = Math.sin(x * 4.0 + t * 0.52) * Math.cos(z * 3.5 + t * 0.44) * 0.045;
 
     // Layer 1: primary swell (slow, long wavelength)
     const swell = Math.sin(x * CFG.FLUID_FREQ_X + t)
@@ -445,7 +445,9 @@ document.querySelectorAll('.knob-svg').forEach(svg => {
   applyKnob(svg, valEl, param, val);
 
   svg.addEventListener('pointerdown', e => {
-    _drag = { svg, valEl, param, value: val, startY: e.clientY };
+    // Use STATE[param] so drag always starts from the current value,
+    // not from the stale closure variable.
+    _drag = { svg, valEl, param, value: STATE[param], startY: e.clientY };
     svg.classList.add('active');
     e.preventDefault();
   });
