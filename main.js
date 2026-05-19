@@ -63,16 +63,20 @@ const CFG = Object.freeze({
 // the render loop reads them every frame without a copy.
 // ────────────────────────────────────────────────────────────────
 const STATE = {
-  // JUCE HOOK — AudioProcessorValueTreeState parameter mirrors
-  gain: 0.50,
-  thump: 0.00,
-  sag: 0.25,
+  // ── JUCE HOOK — APVTS parameter mirrors (/pinam/<key> float [0,1])
+  inputGain:  0.50,
+  volume:     0.60,
+  treble:     0.50,
+  bass:       0.50,
+  reverb:     0.30,
+  rate:       0.20,
+  depth:      0.00,  // drives water displacement amplitude
+  outputGain: 0.70,
 
-  // Internal frame counters (not exposed to JUCE)
   frameCount: 0,
-  lastTime: 0,
-  fps: 0,
-  fluidCpuMs: 0,   // CPU time spent on fluid vertex update
+  lastTime:   0,
+  fps:        0,
+  fluidCpuMs: 0,
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -82,9 +86,14 @@ const canvas     = document.getElementById('webgl-canvas');
 const loadStatus = document.getElementById('load-status');
 
 const valEls = {
-  gain:  document.getElementById('val-gain'),
-  thump: document.getElementById('val-thump'),
-  sag:   document.getElementById('val-sag'),
+  inputGain:  document.getElementById('val-inputGain'),
+  volume:     document.getElementById('val-volume'),
+  treble:     document.getElementById('val-treble'),
+  bass:       document.getElementById('val-bass'),
+  reverb:     document.getElementById('val-reverb'),
+  rate:       document.getElementById('val-rate'),
+  depth:      document.getElementById('val-depth'),
+  outputGain: document.getElementById('val-outputGain'),
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -107,7 +116,7 @@ renderer.localClippingEnabled = true;
 // SCENE + CAMERA
 // ────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x06101a); // deep navy — moody
+scene.background = new THREE.Color(0xcfe8f5);
 
 const camera = new THREE.PerspectiveCamera(CFG.CAM_FOV, 1, CFG.CAM_NEAR, CFG.CAM_FAR);
 camera.position.set(...CFG.CAM_POS);
@@ -242,57 +251,15 @@ for (let i = 0; i < posAttr.count; i++) {
   }
 }
 
-// MeshMatcapMaterial — the Bruno Simon / folio-2019 technique.
-// Each flat-shaded facet samples a different part of the matcap sphere,
-// producing rich tonal variation with zero real-time lighting cost.
-// The matcap is generated procedurally from canvas gradients.
-function makeWaterMatcap() {
-  const s   = 256;
-  const cvs = document.createElement('canvas');
-  cvs.width = cvs.height = s;
-  const ctx = cvs.getContext('2d');
-
-  ctx.fillStyle = '#010810'; ctx.fillRect(0, 0, s, s);
-
-  // Primary highlight — upper-left (studio key light position)
-  let g = ctx.createRadialGradient(72, 64, 3, 105, 88, 115);
-  g.addColorStop(0,    'rgba(200,240,255,1.0)');
-  g.addColorStop(0.10, 'rgba(50,185,240,0.92)');
-  g.addColorStop(0.30, 'rgba(8,90,175,0.75)');
-  g.addColorStop(0.60, 'rgba(2,28,82,0.45)');
-  g.addColorStop(1.0,  'rgba(0,5,22,0.0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
-
-  // Cool aqua secondary fill — left edge
-  g = ctx.createRadialGradient(28, 128, 2, 55, 128, 72);
-  g.addColorStop(0,   'rgba(0,210,220,0.55)');
-  g.addColorStop(0.5, 'rgba(0,95,155,0.3)');
-  g.addColorStop(1,   'rgba(0,18,50,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
-
-  // Deep fill — lower right (shadow zone)
-  g = ctx.createRadialGradient(195, 200, 5, 195, 200, 88);
-  g.addColorStop(0,   'rgba(4,52,118,0.7)');
-  g.addColorStop(0.5, 'rgba(1,18,58,0.4)');
-  g.addColorStop(1,   'rgba(0,4,18,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
-
-  // Vignette — spherical edge darkening
-  g = ctx.createRadialGradient(128, 128, 62, 128, 128, 128);
-  g.addColorStop(0,   'rgba(0,0,0,0)');
-  g.addColorStop(0.65,'rgba(0,0,0,0.08)');
-  g.addColorStop(1,   'rgba(0,0,18,0.92)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
-
-  const tex = new THREE.CanvasTexture(cvs);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-const waterMat = new THREE.MeshMatcapMaterial({
-  matcap:      makeWaterMatcap(),
-  flatShading: true,
-  side:        THREE.DoubleSide,
+const waterMat = new THREE.MeshStandardMaterial({
+  color:           0x0e9ed4,
+  emissive:        new THREE.Color(0x003344).multiplyScalar(0.5),
+  roughness:       0.18,
+  metalness:       0.28,
+  envMapIntensity: 0.85,
+  flatShading:     true,
+  side:            THREE.DoubleSide,
+  transparent:     false,
 });
 const waterMesh = new THREE.Mesh(waterGeo, waterMat);
 waterMesh.userData.wasDisplaced = false;
@@ -414,7 +381,7 @@ objLoader.load(
 // JUCE HOOK: replace STATE.thump read with normalised APVTS value.
 // ────────────────────────────────────────────────────────────────
 function updateFluidDisplacement(timeMs) {
-  const localAmp = (STATE.thump * CFG.FLUID_MAX_AMP) / Math.max(waterFillH, 0.01);
+  const localAmp = (STATE.depth * CFG.FLUID_MAX_AMP) / Math.max(waterFillH, 0.01);
   const t        = timeMs * CFG.FLUID_TIME_SCALE;
 
   for (let ii = 0; ii < topVtxIdx.length; ii++) {
@@ -451,72 +418,62 @@ function updateFluidDisplacement(timeMs) {
 // JUCE HOOK: replace the STATE writes here with APVTS parameter
 //   callbacks received via WebView postMessage.
 // ────────────────────────────────────────────────────────────────
-const KNOB_CIRC = 2 * Math.PI * 24;  // circle r=24 → 150.796
-const ARC_MAX   = KNOB_CIRC * 0.75;  // 270° sweep = 113.097
+// ────────────────────────────────────────────────────────────────
+// ROTARY KNOB SYSTEM
+//
+// Valhalla-style: filled circle + rotating notch indicator.
+// Global pointermove/up on window ensures drag never "drops" when
+// the cursor leaves the SVG element mid-drag.
+//
+// JUCE HOOK: replace STATE writes with APVTS postMessage callbacks.
+// ────────────────────────────────────────────────────────────────
+let _drag = null; // { svg, valEl, param, value, startY }
 
-function setKnobValue(svg, valEl, stateKey, v) {
-  const clamped = Math.max(0, Math.min(1, v));
-  STATE[stateKey] = clamped;
-
-  // Arc: stroke-dasharray = [drawn, gap]
-  const drawn = ARC_MAX * clamped;
-  svg.querySelector('.k-arc').setAttribute(
-    'stroke-dasharray', `${drawn.toFixed(2)} ${(KNOB_CIRC - drawn).toFixed(2)}`
-  );
-
-  // Dot rotation: -135° (min) → +135° (max)
-  const deg = -135 + clamped * 270;
-  svg.querySelector('.k-dot').setAttribute(
-    'transform', `rotate(${deg.toFixed(1)} 32 32)`
-  );
-
-  // Value display (0–99)
-  if (valEl) valEl.textContent = Math.round(clamped * 99).toString().padStart(2, '0');
+function applyKnob(svg, valEl, param, v) {
+  const c = Math.max(0, Math.min(1, v));
+  STATE[param] = c;
+  const deg = -135 + c * 270;
+  svg.querySelector('.k-notch').setAttribute('transform', `rotate(${deg.toFixed(1)} 30 30)`);
+  if (valEl) valEl.textContent = Math.round(c * 100).toString().padStart(3, '0');
 }
 
-function initKnob(svg) {
-  const param    = svg.dataset.param;
-  const stateKey = param;
-  const valEl    = valEls[param] || null;
-  let   value    = parseFloat(svg.dataset.default || '0');
-  let   dragY    = 0;
-  let   dragging = false;
+document.querySelectorAll('.knob-svg').forEach(svg => {
+  const param = svg.dataset.param;
+  const valEl = valEls[param] || null;
+  let   val   = parseFloat(svg.dataset.default ?? '0');
 
-  setKnobValue(svg, valEl, stateKey, value);
+  applyKnob(svg, valEl, param, val);
 
-  svg.addEventListener('pointerdown', (e) => {
-    dragging = true;
-    dragY    = e.clientY;
-    svg.setPointerCapture(e.pointerId);
-    svg.classList.add('dragging');
+  svg.addEventListener('pointerdown', e => {
+    _drag = { svg, valEl, param, value: val, startY: e.clientY };
+    svg.classList.add('active');
     e.preventDefault();
   });
-
-  svg.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    const delta = (dragY - e.clientY) / 200;
-    dragY = e.clientY;
-    value = Math.max(0, Math.min(1, value + delta));
-    setKnobValue(svg, valEl, stateKey, value);
-  });
-
-  const stopDrag = () => { dragging = false; svg.classList.remove('dragging'); };
-  svg.addEventListener('pointerup',     stopDrag);
-  svg.addEventListener('pointercancel', stopDrag);
 
   svg.addEventListener('dblclick', () => {
-    value = parseFloat(svg.dataset.default || '0');
-    setKnobValue(svg, valEl, stateKey, value);
+    val = parseFloat(svg.dataset.default ?? '0');
+    applyKnob(svg, valEl, param, val);
   });
 
-  svg.addEventListener('wheel', (e) => {
+  svg.addEventListener('wheel', e => {
     e.preventDefault();
-    value = Math.max(0, Math.min(1, value - e.deltaY / 2000));
-    setKnobValue(svg, valEl, stateKey, value);
+    val = Math.max(0, Math.min(1, val - e.deltaY / 1800));
+    applyKnob(svg, valEl, param, val);
   }, { passive: false });
-}
+});
 
-document.querySelectorAll('.knob-svg').forEach(initKnob);
+window.addEventListener('pointermove', e => {
+  if (!_drag) return;
+  const { svg, valEl, param, startY } = _drag;
+  const delta = (startY - e.clientY) / 180;
+  _drag.value = Math.max(0, Math.min(1, _drag.value + delta));
+  _drag.startY = e.clientY;
+  applyKnob(svg, valEl, param, _drag.value);
+});
+
+window.addEventListener('pointerup', () => {
+  if (_drag) { _drag.svg.classList.remove('active'); _drag = null; }
+});
 
 // ────────────────────────────────────────────────────────────────
 // RESPONSIVE RESIZE

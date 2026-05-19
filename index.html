@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <title>PINAM</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <!-- Hack — closest to Hack Nerd Font via CDN -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css"/>
+  <link rel="stylesheet" href="style.css"/>
   <script type="importmap">
   {
     "imports": {
@@ -17,84 +16,101 @@
   </script>
 </head>
 <body>
-  <!-- Plugin outer shell — fixed 880×480, mimics a hardware faceplate -->
-  <div id="plugin">
+<div id="plugin">
 
-    <!-- ── Header bar ─────────────────────────────────────────── -->
-    <header id="plugin-header">
-      <span id="logo">PINAM</span>
-      <span id="header-mid">AMP NEURAL MODELER</span>
-      <span id="build-tag">V0.1 PROTOTYPE</span>
-    </header>
-
-    <!-- ── 3D viewport ────────────────────────────────────────── -->
-    <div id="viewport">
-      <canvas id="webgl-canvas"></canvas>
-      <div id="load-overlay">
-        <span id="load-status">INITIALISING</span>
-      </div>
-    </div>
-
-    <!-- ── Controls strip ────────────────────────────────────── -->
-    <footer id="controls">
-
-      <!-- GAIN -------------------------------------------------- -->
-      <div class="knob-cell" id="cell-gain">
-        <div class="knob-wrap">
-          <!--
-            SVG knob — 270° sweep, starts bottom-left, ends bottom-right.
-            JUCE hook: /pinam/gain  float [0,1]
-          -->
-          <svg class="knob-svg" viewBox="0 0 64 64" data-param="gain" data-default="0.5">
-            <circle class="k-track" cx="32" cy="32" r="24"/>
-            <circle class="k-arc"   cx="32" cy="32" r="24"/>
-            <circle class="k-dot"   cx="32" cy="8"  r="3"/>
-          </svg>
-        </div>
-        <div class="knob-label">GAIN</div>
-        <div class="knob-val" id="val-gain">50</div>
-      </div>
-
-      <div class="knob-divider"></div>
-
-      <!-- VCA THUMP — drives water displacement ------------------- -->
-      <div class="knob-cell" id="cell-thump">
-        <div class="knob-wrap">
-          <!--
-            JUCE hook: /pinam/vca_thump  float [0,1]
-            Directly linked to water vertex displacement amplitude.
-          -->
-          <svg class="knob-svg" viewBox="0 0 64 64" data-param="thump" data-default="0">
-            <circle class="k-track" cx="32" cy="32" r="24"/>
-            <circle class="k-arc"   cx="32" cy="32" r="24"/>
-            <circle class="k-dot"   cx="32" cy="8"  r="3"/>
-          </svg>
-        </div>
-        <div class="knob-label">VCA THUMP</div>
-        <div class="knob-val" id="val-thump">00</div>
-      </div>
-
-      <div class="knob-divider"></div>
-
-      <!-- SAG ---------------------------------------------------- -->
-      <div class="knob-cell" id="cell-sag">
-        <div class="knob-wrap">
-          <!--
-            JUCE hook: /pinam/sag  float [0,1]
-          -->
-          <svg class="knob-svg" viewBox="0 0 64 64" data-param="sag" data-default="0.25">
-            <circle class="k-track" cx="32" cy="32" r="24"/>
-            <circle class="k-arc"   cx="32" cy="32" r="24"/>
-            <circle class="k-dot"   cx="32" cy="8"  r="3"/>
-          </svg>
-        </div>
-        <div class="knob-label">SAG</div>
-        <div class="knob-val" id="val-sag">25</div>
-      </div>
-
-    </footer>
+  <!-- 3D viewport — fills everything above the controls strip -->
+  <div id="viewport">
+    <canvas id="webgl-canvas"></canvas>
+    <span id="load-status"></span>
   </div>
 
-  <script type="module" src="main.js"></script>
+  <!-- Controls strip — 8 Valhalla-style rotary knobs -->
+  <div id="controls">
+
+    <!-- Knob macro:
+         SVG viewBox 0 0 60 60.
+         k-body  = filled circle (r=26, face of the knob)
+         k-notch = indicator mark that rotates (transform set by JS)
+         JUCE HOOK: /pinam/<param> float [0–1]
+    -->
+
+    <div class="k" data-group="input">
+      <span class="k-lbl">IN GAIN</span>
+      <svg class="knob-svg" viewBox="0 0 60 60" data-param="inputGain" data-default="0.5">
+        <circle class="k-body" cx="30" cy="30" r="26"/>
+        <rect   class="k-notch" x="28.5" y="4" width="3" height="9"/>
+      </svg>
+      <span class="k-val" id="val-inputGain">050</span>
+    </div>
+
+    <div class="k">
+      <span class="k-lbl">VOLUME</span>
+      <svg class="knob-svg" viewBox="0 0 60 60" data-param="volume" data-default="0.6">
+        <circle class="k-body" cx="30" cy="30" r="26"/>
+        <rect   class="k-notch" x="28.5" y="4" width="3" height="9"/>
+      </svg>
+      <span class="k-val" id="val-volume">060</span>
+    </div>
+
+    <div class="k">
+      <span class="k-lbl">TREBLE</span>
+      <svg class="knob-svg" viewBox="0 0 60 60" data-param="treble" data-default="0.5">
+        <circle class="k-body" cx="30" cy="30" r="26"/>
+        <rect   class="k-notch" x="28.5" y="4" width="3" height="9"/>
+      </svg>
+      <span class="k-val" id="val-treble">050</span>
+    </div>
+
+    <div class="k">
+      <span class="k-lbl">BASS</span>
+      <svg class="knob-svg" viewBox="0 0 60 60" data-param="bass" data-default="0.5">
+        <circle class="k-body" cx="30" cy="30" r="26"/>
+        <rect   class="k-notch" x="28.5" y="4" width="3" height="9"/>
+      </svg>
+      <span class="k-val" id="val-bass">050</span>
+    </div>
+
+    <div class="k">
+      <span class="k-lbl">REVERB</span>
+      <svg class="knob-svg" viewBox="0 0 60 60" data-param="reverb" data-default="0.3">
+        <circle class="k-body" cx="30" cy="30" r="26"/>
+        <rect   class="k-notch" x="28.5" y="4" width="3" height="9"/>
+      </svg>
+      <span class="k-val" id="val-reverb">030</span>
+    </div>
+
+    <div class="k">
+      <span class="k-lbl">RATE</span>
+      <svg class="knob-svg" viewBox="0 0 60 60" data-param="rate" data-default="0.2">
+        <circle class="k-body" cx="30" cy="30" r="26"/>
+        <rect   class="k-notch" x="28.5" y="4" width="3" height="9"/>
+      </svg>
+      <span class="k-val" id="val-rate">020</span>
+    </div>
+
+    <div class="k">
+      <span class="k-lbl">DEPTH</span>
+      <!-- depth drives water displacement — linked to 3D scene -->
+      <svg class="knob-svg" viewBox="0 0 60 60" data-param="depth" data-default="0">
+        <circle class="k-body" cx="30" cy="30" r="26"/>
+        <rect   class="k-notch" x="28.5" y="4" width="3" height="9"/>
+      </svg>
+      <span class="k-val" id="val-depth">000</span>
+    </div>
+
+    <div class="k" data-group="output">
+      <span class="k-lbl">OUT GAIN</span>
+      <svg class="knob-svg" viewBox="0 0 60 60" data-param="outputGain" data-default="0.7">
+        <circle class="k-body" cx="30" cy="30" r="26"/>
+        <rect   class="k-notch" x="28.5" y="4" width="3" height="9"/>
+      </svg>
+      <span class="k-val" id="val-outputGain">070</span>
+    </div>
+
+  </div><!-- /#controls -->
+
+</div><!-- /#plugin -->
+
+<script type="module" src="main.js"></script>
 </body>
 </html>
