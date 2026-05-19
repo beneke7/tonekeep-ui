@@ -1,31 +1,29 @@
 /* ================================================================
    PINAM — STYLE.CSS
-   Palette: Warm Sand #f2ece0 / Dark Amber #b05600
-   Rules: No gradients. No box-shadow. No border-radius anywhere.
-          All text uppercase via text-transform, not HTML.
+   Aesthetic anchors: Teenage Engineering OP-1/OP-Z, Bruno Simon
+   folio-2019, industrial hardware.
+   Fixed 880×480 plugin window — no responsive breakpoints.
    ================================================================ */
 
-/* ── Custom properties ────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&display=swap');
+
 :root {
-  /* Bright warm scheme — sand background, dark-amber text */
-  --black:       #f2ece0;   /* warm sand (used as bg throughout) */
-  --amber:       #b05600;   /* dark burnt amber — readable on sand */
-  --amber-mid:   #7a3c00;   /* deep brown for secondary labels */
-  --amber-dark:  #d4b870;   /* golden sand for inactive fills & tracks */
-  --red-clip:    #cc2200;
+  --bg:          #0e0d0b;    /* near-black warm */
+  --panel:       #141210;    /* slightly lighter panel */
+  --border:      #2a2520;    /* subtle warm border */
+  --text:        #b8ae98;    /* warm cream */
+  --text-dim:    #4a4540;    /* dimmed label */
+  --accent:      #d4830a;    /* amber/orange — main accent */
+  --accent-dim:  #3a2408;    /* very dark amber for track */
+  --dot-bg:      #1a1816;    /* knob face */
 
   --font:        'JetBrains Mono', 'Courier New', monospace;
-  --fs-xs:       9px;
-  --fs-sm:       10px;
-  --fs-md:       11px;
-  --fs-hd:       12px;
-
-  --border:      1px solid var(--amber);
-  --border-dim:  1px solid var(--amber-mid);
-  --border-faint:1px solid #c8a850;
+  --fs-xs:       8px;
+  --fs-sm:       9px;
+  --fs-md:       10px;
+  --fs-hd:       11px;
 }
 
-/* ── Reset ────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -35,232 +33,222 @@
 html, body {
   width: 100%;
   height: 100%;
-  overflow: hidden;
-  background: var(--black);
-  color: var(--amber);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #080706;
   font-family: var(--font);
-  font-size: var(--fs-md);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Root grid ────────────────────────────────────────────────── */
-#app {
-  display: grid;
-  grid-template-columns: 20% 60% 20%;
-  grid-template-rows: 100vh;
-  width: 100%;
-  height: 100vh;
-  border: var(--border);
-}
-
-/* ── Shared panel chrome ──────────────────────────────────────── */
-aside, main {
+/* ── Plugin shell ─────────────────────────────────────────────── */
+#plugin {
+  width:  880px;
+  height: 480px;
   display: flex;
   flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  /* Subtle noise texture mimicking a matte hardware faceplate */
+  position: relative;
   overflow: hidden;
-}
-
-/* Column dividers */
-#sidebar-left  { border-right: var(--border); }
-#canvas-container { border-right: var(--border); }
-
-/* Panel top labels */
-.panel-header {
-  flex-shrink: 0;
-  padding: 10px 14px;
-  font-size: var(--fs-hd);
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  border-bottom: var(--border);
-}
-
-/* ── Left sidebar: telemetry ──────────────────────────────────── */
-#sidebar-left {
-  overflow-y: auto;
-  scrollbar-width: none; /* Firefox */
-}
-#sidebar-left::-webkit-scrollbar { display: none; }
-
-.tele-group {
-  padding: 10px 14px;
   flex-shrink: 0;
 }
 
-.tele-row {
+/* Dot-grid texture overlay (TE-style faceplate) */
+#plugin::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, #ffffff08 1px, transparent 1px);
+  background-size: 12px 12px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Screw holes — four corners, TE aesthetic */
+#plugin::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle 4px at 14px 14px,   #0e0d0b 2px, transparent 2px),
+    radial-gradient(circle 4px at calc(100% - 14px) 14px,   #0e0d0b 2px, transparent 2px),
+    radial-gradient(circle 4px at 14px calc(100% - 14px),   #0e0d0b 2px, transparent 2px),
+    radial-gradient(circle 4px at calc(100% - 14px) calc(100% - 14px), #0e0d0b 2px, transparent 2px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ── Header ───────────────────────────────────────────────────── */
+#plugin-header {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  height: 32px;
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 3px 0;
+  align-items: center;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--border);
+  gap: 0;
 }
 
-.tele-key {
+#logo {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--text);
+}
+
+#header-mid {
+  flex: 1;
+  text-align: center;
   font-size: var(--fs-xs);
   font-weight: 300;
-  color: var(--amber-mid);
-  white-space: nowrap;
+  color: var(--text-dim);
+  letter-spacing: 0.18em;
 }
 
-.tele-val {
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  text-align: right;
-  min-width: 56px;
-  padding-left: 8px;
+#build-tag {
+  font-size: var(--fs-xs);
+  font-weight: 300;
+  color: var(--text-dim);
+  letter-spacing: 0.12em;
 }
 
-.tele-divider {
-  border-top: var(--border-dim);
-  flex-shrink: 0;
-}
-
-/* ── Center canvas ────────────────────────────────────────────── */
-#canvas-container {
-  background: var(--black);
+/* ── Viewport (3D canvas) ─────────────────────────────────────── */
+#viewport {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #06101a;
 }
 
 #webgl-canvas {
   display: block;
-  flex: 1;
   width: 100%;
-  min-height: 0;
+  height: 100%;
 }
 
-#canvas-footer {
-  flex-shrink: 0;
-  padding: 4px 12px;
-  border-top: var(--border-dim);
+#load-overlay {
+  position: absolute;
+  bottom: 8px;
+  left: 14px;
+  pointer-events: none;
+}
+
+#load-status {
   font-size: var(--fs-xs);
-  color: var(--amber-mid);
+  color: var(--text-dim);
   letter-spacing: 0.14em;
 }
 
-/* ── Right sidebar: parameter sliders ────────────────────────── */
-#sidebar-right {
-  overflow: hidden;
-}
-
-/* Each param block takes equal vertical space */
-.param-block {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 10px 14px 8px;
-  min-height: 0;
-}
-
-.param-divider {
-  border-top: var(--border-dim);
+/* ── Controls strip ───────────────────────────────────────────── */
+#controls {
+  position: relative;
+  z-index: 1;
   flex-shrink: 0;
-}
-
-.param-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
-  margin-bottom: 6px;
-}
-
-.param-label {
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
-.param-val {
-  font-size: var(--fs-sm);
-  font-weight: 300;
-  color: var(--amber-mid);
-  font-variant-numeric: tabular-nums;
-  min-width: 28px;
-  text-align: right;
-}
-
-/* ── Vertical slider container ────────────────────────────────── */
-.slider-wrap-v {
-  flex: 1;
-  min-height: 0;
+  height: 96px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  padding: 0 40px;
+}
+
+/* Thin vertical dividers between knob groups */
+.knob-divider {
+  width: 1px;
+  height: 48px;
+  background: var(--border);
+  margin: 0 36px;
+  flex-shrink: 0;
+}
+
+/* ── Knob cell ────────────────────────────────────────────────── */
+.knob-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.knob-wrap {
   position: relative;
-}
-
-/* ── Range input: base reset ──────────────────────────────────── */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
+  width: 58px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: ns-resize;
-  outline: none;
 }
 
-/* ── Vertical range slider ────────────────────────────────────── */
-/*
-   writing-mode: vertical-lr  →  track runs top→bottom
-   direction: rtl             →  0 at bottom, 100 at top (fader convention)
-   Works in Chrome 111+, Safari 16.4+, Firefox 108+.
-*/
-input[type="range"].slider-v {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  width: 36px;
-  height: 100%;
-  min-height: 60px;
+/* ── SVG knob ─────────────────────────────────────────────────── */
+.knob-svg {
+  width: 58px;
+  height: 58px;
+  overflow: visible;
 }
 
-/* ── Webkit: track ────────────────────────────────────────────── */
-input[type="range"].slider-v::-webkit-slider-runnable-track {
-  background: var(--amber-dark);
-  border: var(--border-faint);
-  width: 4px;
-  border-radius: 0;
+/* Background track ring */
+.k-track {
+  fill: none;
+  stroke: var(--accent-dim);
+  stroke-width: 1.5;
+  /* 270° arc: circumference=150.8, 270/360*150.8=113.1 visible, 37.7 gap */
+  stroke-dasharray: 113.1 37.7;
+  /* Rotate so arc starts at bottom-left (-135° from top = rotate 135°) */
+  transform: rotate(135deg);
+  transform-origin: 32px 32px;
+  stroke-linecap: butt;
 }
 
-/* ── Webkit: thumb (flat fader cap) ──────────────────────────── */
-/*
-   margin-left centers the 32px-wide thumb on the 4px track:
-   offset = -(thumb_width - track_width) / 2 = -(32-4)/2 = -14px
-*/
-input[type="range"].slider-v::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  background: var(--amber);
-  width: 32px;
-  height: 8px;
-  margin-left: -14px;
-  border-radius: 0;
-  border: none;
-  transition: background 80ms linear;
+/* Value fill arc (same geometry, colour differs, width a hair thicker) */
+.k-arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 0 150.8;
+  transform: rotate(135deg);
+  transform-origin: 32px 32px;
+  stroke-linecap: butt;
+  transition: stroke-dasharray 40ms linear;
 }
 
-input[type="range"].slider-v:hover::-webkit-slider-thumb,
-input[type="range"].slider-v:focus::-webkit-slider-thumb {
-  background: #ffffff;
+/* Position indicator dot */
+.k-dot {
+  fill: var(--accent);
+  /* default at min position: rotate(-135deg) i.e. bottom-left */
+  transform: rotate(-135deg);
+  transform-origin: 32px 32px;
+  transition: transform 40ms linear;
 }
 
-input[type="range"].slider-v::-webkit-slider-thumb:active {
-  background: #ffffff;
+/* Label + value */
+.knob-label {
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--text-dim);
+  letter-spacing: 0.16em;
+  white-space: nowrap;
 }
 
-/* ── Firefox: track ───────────────────────────────────────────── */
-input[type="range"].slider-v::-moz-range-track {
-  background: var(--amber-dark);
-  border: var(--border-faint);
-  width: 4px;
-  border-radius: 0;
+.knob-val {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.1em;
+  min-width: 28px;
+  text-align: center;
 }
 
-/* ── Firefox: thumb ───────────────────────────────────────────── */
-input[type="range"].slider-v::-moz-range-thumb {
-  background: var(--amber);
-  width: 32px;
-  height: 8px;
-  border-radius: 0;
-  border: none;
-}
-
-input[type="range"].slider-v:hover::-moz-range-thumb {
-  background: #ffffff;
-}
+/* Active state — accent brightens while dragging */
+.knob-svg.dragging .k-arc { stroke: #f0a030; }
+.knob-svg.dragging .k-dot { fill: #f0a030; }

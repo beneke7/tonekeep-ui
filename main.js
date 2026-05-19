@@ -78,30 +78,14 @@ const STATE = {
 // ────────────────────────────────────────────────────────────────
 // DOM REFS
 // ────────────────────────────────────────────────────────────────
-const canvas = document.getElementById('webgl-canvas');
-const container = document.getElementById('canvas-container');
-
-const sliders = {
-  gain: document.getElementById('slider-gain'),
-  thump: document.getElementById('slider-thump'),
-  sag: document.getElementById('slider-sag'),
-};
-const valEls = {
-  gain: document.getElementById('val-gain'),
-  thump: document.getElementById('val-thump'),
-  sag: document.getElementById('val-sag'),
-};
-const tele = {
-  status: document.getElementById('tele-status'),
-  inference: document.getElementById('tele-inference'),
-  buffer: document.getElementById('tele-buffer'),
-  sr: document.getElementById('tele-sr'),
-  latency: document.getElementById('tele-latency'),
-  clip: document.getElementById('tele-clip'),
-  fps: document.getElementById('tele-fps'),
-  fluidCpu: document.getElementById('tele-fluid-cpu'),
-};
+const canvas     = document.getElementById('webgl-canvas');
 const loadStatus = document.getElementById('load-status');
+
+const valEls = {
+  gain:  document.getElementById('val-gain'),
+  thump: document.getElementById('val-thump'),
+  sag:   document.getElementById('val-sag'),
+};
 
 // ────────────────────────────────────────────────────────────────
 // RENDERER
@@ -258,18 +242,57 @@ for (let i = 0; i < posAttr.count; i++) {
   }
 }
 
-// MeshStandardMaterial + envMapIntensity: each facet reflects the
-// RoomEnvironment cube map at its own angle — zero extra assets needed,
-// but the surface reads as genuinely textured rather than flat-painted.
-const waterMat = new THREE.MeshStandardMaterial({
-  color:           0x0e9ed4,
-  emissive:        new THREE.Color(0x003344).multiplyScalar(0.5),
-  roughness:       0.18,
-  metalness:       0.28,
-  envMapIntensity: 0.85,
-  flatShading:     true,
-  side:            THREE.DoubleSide,
-  transparent:     false,
+// MeshMatcapMaterial — the Bruno Simon / folio-2019 technique.
+// Each flat-shaded facet samples a different part of the matcap sphere,
+// producing rich tonal variation with zero real-time lighting cost.
+// The matcap is generated procedurally from canvas gradients.
+function makeWaterMatcap() {
+  const s   = 256;
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = s;
+  const ctx = cvs.getContext('2d');
+
+  ctx.fillStyle = '#010810'; ctx.fillRect(0, 0, s, s);
+
+  // Primary highlight — upper-left (studio key light position)
+  let g = ctx.createRadialGradient(72, 64, 3, 105, 88, 115);
+  g.addColorStop(0,    'rgba(200,240,255,1.0)');
+  g.addColorStop(0.10, 'rgba(50,185,240,0.92)');
+  g.addColorStop(0.30, 'rgba(8,90,175,0.75)');
+  g.addColorStop(0.60, 'rgba(2,28,82,0.45)');
+  g.addColorStop(1.0,  'rgba(0,5,22,0.0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+
+  // Cool aqua secondary fill — left edge
+  g = ctx.createRadialGradient(28, 128, 2, 55, 128, 72);
+  g.addColorStop(0,   'rgba(0,210,220,0.55)');
+  g.addColorStop(0.5, 'rgba(0,95,155,0.3)');
+  g.addColorStop(1,   'rgba(0,18,50,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+
+  // Deep fill — lower right (shadow zone)
+  g = ctx.createRadialGradient(195, 200, 5, 195, 200, 88);
+  g.addColorStop(0,   'rgba(4,52,118,0.7)');
+  g.addColorStop(0.5, 'rgba(1,18,58,0.4)');
+  g.addColorStop(1,   'rgba(0,4,18,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+
+  // Vignette — spherical edge darkening
+  g = ctx.createRadialGradient(128, 128, 62, 128, 128, 128);
+  g.addColorStop(0,   'rgba(0,0,0,0)');
+  g.addColorStop(0.65,'rgba(0,0,0,0.08)');
+  g.addColorStop(1,   'rgba(0,0,18,0.92)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const waterMat = new THREE.MeshMatcapMaterial({
+  matcap:      makeWaterMatcap(),
+  flatShading: true,
+  side:        THREE.DoubleSide,
 });
 const waterMesh = new THREE.Mesh(waterGeo, waterMat);
 waterMesh.userData.wasDisplaced = false;
@@ -353,7 +376,7 @@ objLoader.load(
     waterFillH = fillH;
 
     loadStatus.textContent = 'MODEL LOADED';
-    tele.status.textContent = 'ACTIVE';
+    loadStatus.textContent = 'READY';
   },
 
   // ── onProgress ────────────────────────────────────────────
@@ -367,7 +390,7 @@ objLoader.load(
   // ── onError ───────────────────────────────────────────────
   (err) => {
     loadStatus.textContent = 'MODEL ERROR — ENSURE amp.obj IS IN ROOT DIR';
-    tele.status.textContent = 'ERR';
+    loadStatus.textContent = 'MODEL ERROR';
     console.error('[PINAM] OBJLoader failed:', err);
 
     // Fallback wireframe so the interface isn't completely empty
@@ -391,75 +414,109 @@ objLoader.load(
 // JUCE HOOK: replace STATE.thump read with normalised APVTS value.
 // ────────────────────────────────────────────────────────────────
 function updateFluidDisplacement(timeMs) {
-  // Convert world amplitude to local Y (box is scaled by waterFillH in Y)
   const localAmp = (STATE.thump * CFG.FLUID_MAX_AMP) / Math.max(waterFillH, 0.01);
+  const t        = timeMs * CFG.FLUID_TIME_SCALE;
 
-  if (localAmp < 0.0002) {
-    if (waterMesh.userData.wasDisplaced) {
-      for (let ii = 0; ii < topVtxIdx.length; ii++) posAttr.setY(topVtxIdx[ii], 0.5);
-      posAttr.needsUpdate = true;
-      waterMesh.userData.wasDisplaced = false;
-    }
-    return;
-  }
-
-  const t = timeMs * CFG.FLUID_TIME_SCALE;
   for (let ii = 0; ii < topVtxIdx.length; ii++) {
     const x = topOrigXZ[ii * 2];
     const z = topOrigXZ[ii * 2 + 1];
-    const wave1 = Math.sin(x * CFG.FLUID_FREQ_X + t);
-    const wave2 = Math.cos(z * CFG.FLUID_FREQ_Z + t * 0.72 + CFG.FLUID_PHASE);
-    // Diagonal cross-wave at ~30% amplitude — creates interference texture
-    const wave3 = Math.sin((x - z) * 3.8 + t * 1.15) * 0.28;
-    posAttr.setY(topVtxIdx[ii], 0.5 + localAmp * (wave1 * wave2 + wave3));
+
+    // Idle ripple — always on, makes water feel alive even at thump=0
+    const idle  = Math.sin(x * 1.6 + t * 0.38) * Math.cos(z * 1.4 + t * 0.30) * 0.008;
+
+    // Layer 1: primary swell (slow, long wavelength)
+    const swell = Math.sin(x * CFG.FLUID_FREQ_X + t)
+                * Math.cos(z * CFG.FLUID_FREQ_Z + t * 0.72 + CFG.FLUID_PHASE);
+
+    // Layer 2: diagonal chop (criss-cross interference texture)
+    const chop  = Math.sin((x * 0.9 + z * 1.1) * 3.0 + t * 1.45) * 0.40
+                + Math.cos((x * 1.2 - z * 0.8) * 2.6 + t * 1.10) * 0.30;
+
+    // Layer 3: fine surface ripple (fast, small — adds detail at high thump)
+    const fine  = (Math.sin(x * 6.2 + t * 2.4) + Math.cos(z * 5.6 - t * 2.0)) * 0.14;
+
+    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (swell + chop + fine));
   }
 
   posAttr.needsUpdate = true;
-  // flatShading: GPU recomputes face normals from dFdx/dFdy — no CPU call needed
-  waterMesh.userData.wasDisplaced = true;
 }
 
 // ────────────────────────────────────────────────────────────────
-// SLIDER → STATE BINDING
-// Normalises slider integer [0,100] to float [0.0, 1.0].
-// JUCE HOOK: delete these listeners; write to STATE.* directly
-//   from your WebView message handler instead.
+// SVG ROTARY KNOB INTERACTION
+//
+// Each knob is an SVG with class .knob-svg and data-param / data-default.
+// Vertical drag maps to value: 200px drag = full range.
+// Double-click resets to default.  Scrollwheel fine-tunes.
+//
+// JUCE HOOK: replace the STATE writes here with APVTS parameter
+//   callbacks received via WebView postMessage.
 // ────────────────────────────────────────────────────────────────
-function bindSlider(key, stateKey) {
-  sliders[key].addEventListener('input', () => {
-    const raw = parseInt(sliders[key].value, 10);
-    STATE[stateKey] = raw / 100;
-    valEls[key].textContent = raw.toString().padStart(3, '0');
+const KNOB_CIRC = 2 * Math.PI * 24;  // circle r=24 → 150.796
+const ARC_MAX   = KNOB_CIRC * 0.75;  // 270° sweep = 113.097
+
+function setKnobValue(svg, valEl, stateKey, v) {
+  const clamped = Math.max(0, Math.min(1, v));
+  STATE[stateKey] = clamped;
+
+  // Arc: stroke-dasharray = [drawn, gap]
+  const drawn = ARC_MAX * clamped;
+  svg.querySelector('.k-arc').setAttribute(
+    'stroke-dasharray', `${drawn.toFixed(2)} ${(KNOB_CIRC - drawn).toFixed(2)}`
+  );
+
+  // Dot rotation: -135° (min) → +135° (max)
+  const deg = -135 + clamped * 270;
+  svg.querySelector('.k-dot').setAttribute(
+    'transform', `rotate(${deg.toFixed(1)} 32 32)`
+  );
+
+  // Value display (0–99)
+  if (valEl) valEl.textContent = Math.round(clamped * 99).toString().padStart(2, '0');
+}
+
+function initKnob(svg) {
+  const param    = svg.dataset.param;
+  const stateKey = param;
+  const valEl    = valEls[param] || null;
+  let   value    = parseFloat(svg.dataset.default || '0');
+  let   dragY    = 0;
+  let   dragging = false;
+
+  setKnobValue(svg, valEl, stateKey, value);
+
+  svg.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    dragY    = e.clientY;
+    svg.setPointerCapture(e.pointerId);
+    svg.classList.add('dragging');
+    e.preventDefault();
   });
+
+  svg.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const delta = (dragY - e.clientY) / 200;
+    dragY = e.clientY;
+    value = Math.max(0, Math.min(1, value + delta));
+    setKnobValue(svg, valEl, stateKey, value);
+  });
+
+  const stopDrag = () => { dragging = false; svg.classList.remove('dragging'); };
+  svg.addEventListener('pointerup',     stopDrag);
+  svg.addEventListener('pointercancel', stopDrag);
+
+  svg.addEventListener('dblclick', () => {
+    value = parseFloat(svg.dataset.default || '0');
+    setKnobValue(svg, valEl, stateKey, value);
+  });
+
+  svg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    value = Math.max(0, Math.min(1, value - e.deltaY / 2000));
+    setKnobValue(svg, valEl, stateKey, value);
+  }, { passive: false });
 }
-bindSlider('gain', 'gain');
-bindSlider('thump', 'thump');
-bindSlider('sag', 'sag');
 
-// ────────────────────────────────────────────────────────────────
-// TELEMETRY UPDATER
-// Throttled to CFG.TELE_INTERVAL ms — DOM writes are expensive.
-// JUCE HOOK: replace the mocked latency/rms lines with values
-//   pushed via WebSocket or postMessage from the JUCE audio thread.
-// ────────────────────────────────────────────────────────────────
-let _teleLastUpdate = 0;
-
-function updateTelemetry(nowMs) {
-  if (nowMs - _teleLastUpdate < CFG.TELE_INTERVAL) return;
-  _teleLastUpdate = nowMs;
-
-  tele.inference.textContent = STATE.fluidCpuMs.toFixed(2) + 'MS';
-  tele.fps.textContent = STATE.fps.toFixed(0);
-  tele.fluidCpu.textContent = STATE.fluidCpuMs.toFixed(3) + 'MS';
-
-  // JUCE HOOK: /pinam/latency_ms float
-  tele.latency.textContent = (2.9 + (Math.random() * 0.3 - 0.15)).toFixed(1) + 'MS';
-
-  // JUCE HOOK: /pinam/clip_flag bool
-  const isClipping = STATE.gain > 0.93;
-  tele.clip.textContent = isClipping ? 'CLIP!' : '--';
-  tele.clip.style.color = isClipping ? 'var(--red-clip)' : '';
-}
+document.querySelectorAll('.knob-svg').forEach(initKnob);
 
 // ────────────────────────────────────────────────────────────────
 // RESPONSIVE RESIZE
@@ -514,7 +571,6 @@ function animate(nowMs) {
 
   controls.update();
   renderer.render(scene, camera);
-  updateTelemetry(nowMs);
 }
 
 requestAnimationFrame(animate);

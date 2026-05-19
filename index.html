@@ -2,164 +2,98 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PINAM — AMP CONFIGURATOR</title>
-
-  <!-- Monospace typeface -->
+  <title>PINAM</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-
-  <!--
-    Three.js via importmap — all addons resolved under the same version
-    so OBJLoader / OrbitControls / RoomEnvironment use a single bundle.
-    JUCE integration: replace the CDN with a local vendored copy when
-    shipping the plugin WebView.
-  -->
   <script type="importmap">
   {
     "imports": {
-      "three":          "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
-      "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+      "three":         "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
     }
   }
   </script>
 </head>
 <body>
-  <div id="app">
+  <!-- Plugin outer shell — fixed 880×480, mimics a hardware faceplate -->
+  <div id="plugin">
 
-    <!-- ═══════════════════════════════════════════════════
-         LEFT SIDEBAR — telemetry read-outs
-         JUCE hook: populate via WebSocket or OSC bridge
-         ═══════════════════════════════════════════════════ -->
-    <aside id="sidebar-left">
-      <div class="panel-header">PINAM V0.1</div>
+    <!-- ── Header bar ─────────────────────────────────────────── -->
+    <header id="plugin-header">
+      <span id="logo">PINAM</span>
+      <span id="header-mid">AMP NEURAL MODELER</span>
+      <span id="build-tag">V0.1 PROTOTYPE</span>
+    </header>
 
-      <div class="tele-group">
-        <div class="tele-row">
-          <span class="tele-key">STATUS</span>
-          <span class="tele-val" id="tele-status">LOADING</span>
-        </div>
-        <div class="tele-row">
-          <span class="tele-key">INFERENCE</span>
-          <span class="tele-val" id="tele-inference">1.33MS</span>
-        </div>
-        <div class="tele-row">
-          <span class="tele-key">BUFFER</span>
-          <span class="tele-val" id="tele-buffer">64</span>
-        </div>
-      </div>
-
-      <div class="tele-divider"></div>
-
-      <div class="tele-group">
-        <div class="tele-row">
-          <span class="tele-key">SAMPLERATE</span>
-          <span class="tele-val" id="tele-sr">44100</span>
-        </div>
-        <div class="tele-row">
-          <span class="tele-key">LATENCY</span>
-          <span class="tele-val" id="tele-latency">2.9MS</span>
-        </div>
-        <div class="tele-row">
-          <span class="tele-key">CLIP</span>
-          <span class="tele-val" id="tele-clip">--</span>
-        </div>
-        <div class="tele-row">
-          <span class="tele-key">FPS</span>
-          <span class="tele-val" id="tele-fps">--</span>
-        </div>
-        <div class="tele-row">
-          <span class="tele-key">FLUID CPU</span>
-          <span class="tele-val" id="tele-fluid-cpu">0.00MS</span>
-        </div>
-      </div>
-    </aside>
-
-    <!-- ═══════════════════════════════════════════════════
-         CENTER — WebGL canvas
-         ═══════════════════════════════════════════════════ -->
-    <main id="canvas-container">
-      <!-- Three.js renders directly into this canvas -->
+    <!-- ── 3D viewport ────────────────────────────────────────── -->
+    <div id="viewport">
       <canvas id="webgl-canvas"></canvas>
-      <div id="canvas-footer">
-        <span id="load-status">AWAITING MODEL...</span>
+      <div id="load-overlay">
+        <span id="load-status">INITIALISING</span>
       </div>
-    </main>
+    </div>
 
-    <!-- ═══════════════════════════════════════════════════
-         RIGHT SIDEBAR — parameter sliders
-         orient="vertical" targets Firefox; writing-mode
-         targets Chrome/Safari (see style.css).
-         JUCE HOOK: replace oninput with APVTS callbacks.
-         ═══════════════════════════════════════════════════ -->
-    <aside id="sidebar-right">
-      <div class="panel-header">PARAMETERS</div>
+    <!-- ── Controls strip ────────────────────────────────────── -->
+    <footer id="controls">
 
-      <!-- GAIN ─────────────────────────────────────────── -->
-      <div class="param-block">
-        <div class="param-header">
-          <span class="param-label">GAIN</span>
-          <!-- JUCE HOOK: /pinam/gain [0.0–1.0] normalized -->
-          <span class="param-val" id="val-gain">050</span>
+      <!-- GAIN -------------------------------------------------- -->
+      <div class="knob-cell" id="cell-gain">
+        <div class="knob-wrap">
+          <!--
+            SVG knob — 270° sweep, starts bottom-left, ends bottom-right.
+            JUCE hook: /pinam/gain  float [0,1]
+          -->
+          <svg class="knob-svg" viewBox="0 0 64 64" data-param="gain" data-default="0.5">
+            <circle class="k-track" cx="32" cy="32" r="24"/>
+            <circle class="k-arc"   cx="32" cy="32" r="24"/>
+            <circle class="k-dot"   cx="32" cy="8"  r="3"/>
+          </svg>
         </div>
-        <div class="slider-wrap-v">
-          <input
-            type="range"
-            id="slider-gain"
-            class="slider-v"
-            min="0" max="100" value="50"
-            orient="vertical"
-            aria-label="GAIN"
-          />
-        </div>
+        <div class="knob-label">GAIN</div>
+        <div class="knob-val" id="val-gain">50</div>
       </div>
 
-      <div class="param-divider"></div>
+      <div class="knob-divider"></div>
 
-      <!-- VCA THUMP — drives fluid Y-displacement ──────── -->
-      <div class="param-block">
-        <div class="param-header">
-          <span class="param-label">VCA THUMP</span>
-          <!-- JUCE HOOK: /pinam/vca_thump [0.0–1.0] normalized -->
-          <span class="param-val" id="val-thump">000</span>
+      <!-- VCA THUMP — drives water displacement ------------------- -->
+      <div class="knob-cell" id="cell-thump">
+        <div class="knob-wrap">
+          <!--
+            JUCE hook: /pinam/vca_thump  float [0,1]
+            Directly linked to water vertex displacement amplitude.
+          -->
+          <svg class="knob-svg" viewBox="0 0 64 64" data-param="thump" data-default="0">
+            <circle class="k-track" cx="32" cy="32" r="24"/>
+            <circle class="k-arc"   cx="32" cy="32" r="24"/>
+            <circle class="k-dot"   cx="32" cy="8"  r="3"/>
+          </svg>
         </div>
-        <div class="slider-wrap-v">
-          <input
-            type="range"
-            id="slider-thump"
-            class="slider-v"
-            min="0" max="100" value="0"
-            orient="vertical"
-            aria-label="VCA THUMP"
-          />
-        </div>
+        <div class="knob-label">VCA THUMP</div>
+        <div class="knob-val" id="val-thump">00</div>
       </div>
 
-      <div class="param-divider"></div>
+      <div class="knob-divider"></div>
 
-      <!-- SAG ──────────────────────────────────────────── -->
-      <div class="param-block">
-        <div class="param-header">
-          <span class="param-label">SAG</span>
-          <!-- JUCE HOOK: /pinam/sag [0.0–1.0] normalized -->
-          <span class="param-val" id="val-sag">025</span>
+      <!-- SAG ---------------------------------------------------- -->
+      <div class="knob-cell" id="cell-sag">
+        <div class="knob-wrap">
+          <!--
+            JUCE hook: /pinam/sag  float [0,1]
+          -->
+          <svg class="knob-svg" viewBox="0 0 64 64" data-param="sag" data-default="0.25">
+            <circle class="k-track" cx="32" cy="32" r="24"/>
+            <circle class="k-arc"   cx="32" cy="32" r="24"/>
+            <circle class="k-dot"   cx="32" cy="8"  r="3"/>
+          </svg>
         </div>
-        <div class="slider-wrap-v">
-          <input
-            type="range"
-            id="slider-sag"
-            class="slider-v"
-            min="0" max="100" value="25"
-            orient="vertical"
-            aria-label="SAG"
-          />
-        </div>
+        <div class="knob-label">SAG</div>
+        <div class="knob-val" id="val-sag">25</div>
       </div>
-    </aside>
 
-  </div><!-- /#app -->
+    </footer>
+  </div>
 
   <script type="module" src="main.js"></script>
 </body>
