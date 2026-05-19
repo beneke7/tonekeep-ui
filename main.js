@@ -1,89 +1,65 @@
 // ================================================================
-// PINAM — MAIN.JS
-// Three.js WebGL scene for the PiNAM Amplifier Configurator.
+// TONEKEEP — MAIN.JS
+// Three.js WebGL scene + JUCE 8 native bridge.
 //
-// JUCE integration guide
-// ──────────────────────
-// All "JUCE HOOK" comments mark values/functions to replace with
-// JUCE AudioProcessorValueTreeState parameter callbacks once the
-// WebView bridge (WebBrowserComponent + native <-> JS postMessage)
-// is wired up.
+// JUCE integration
+// ────────────────
+// C++ → JS:  webView->emitEventIfBrowserIsVisible("eventId", var)
+//             → window.__JUCE__.backend.addEventListener("eventId", fn)
 //
-// Suggested OSC namespace: /pinam/<param>  type: float  range: [0,1]
-//   /pinam/gain         → STATE.gain
-//   /pinam/vca_thump    → STATE.thump
-//   /pinam/sag          → STATE.sag
-//   /pinam/inference_ms → tele.inference (read-only, from DSP thread)
-//   /pinam/clip_flag    → tele.clip      (read-only, from DSP thread)
+// JS → C++:  window.__JUCE__.backend.emitEvent("eventId", object)
+//             → Options.withEventListener("eventId", fn)
 // ================================================================
 
 import * as THREE from 'three';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { OBJLoader }         from 'three/addons/loaders/OBJLoader.js';
+import { OrbitControls }     from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment }   from 'three/addons/environments/RoomEnvironment.js';
+import { mergeGeometries }   from 'three/addons/utils/BufferGeometryUtils.js';
 
-// ────────────────────────────────────────────────────────────────
-// CONFIG — static tuning constants.
-// Move to a config.json and fetch() if you want hot-reload tweaks.
-// ────────────────────────────────────────────────────────────────
+// ── CONFIG ──────────────────────────────────────────────────────
 const CFG = Object.freeze({
-  // Asset
   OBJ_PATH: './amp2.obj',
 
-  // Camera — elevated angle so the horizontal fluid plane is clearly visible
-  CAM_FOV: 50,
-  CAM_NEAR: 0.1,
-  CAM_FAR: 100,
-  CAM_POS: [0, 4.5, 5.5],
-  CAM_TARGET: [0, 0.5, 0],
+  CAM_FOV: 50, CAM_NEAR: 0.1, CAM_FAR: 100,
+  CAM_POS: [0, 4.5, 5.5], CAM_TARGET: [0, 0.5, 0],
 
-  // Auto-rotate disabled — OrbitControls gives full manual control.
-  // Set > 0 to re-enable, but note it compounds with damping settle.
   AUTO_ROTATE_SPEED: 0,
 
-  // Fluid geometry — low segment count = chunky low-poly facets
-  FLUID_SEGMENTS: 72,         // higher res — fine ripple detail needs density
+  FLUID_SEGMENTS:   72,
   FLUID_WORLD_SIZE: 2.2,
-
-  // Fluid displacement
-  FLUID_MAX_AMP: 0.48,        // big waves dominate
-  FLUID_FREQ_X: 2.5,
-  FLUID_FREQ_Z: 2.0,
+  FLUID_MAX_AMP:    0.48,
+  FLUID_FREQ_X:     2.5,
+  FLUID_FREQ_Z:     2.0,
   FLUID_TIME_SCALE: 0.0020,
-  FLUID_PHASE: 1.4,
-
-  // Telemetry DOM refresh interval in ms
-  TELE_INTERVAL: 180,
+  FLUID_PHASE:      1.4,
 });
 
-// ────────────────────────────────────────────────────────────────
-// STATE — mutable render-state.
-// JUCE writes parameter values directly into this object;
-// the render loop reads them every frame without a copy.
-// ────────────────────────────────────────────────────────────────
+// ── STATE ────────────────────────────────────────────────────────
 const STATE = {
-  // ── JUCE HOOK — APVTS parameter mirrors (/pinam/<key> float [0,1])
+  // APVTS mirrors — normalised [0,1]
   inputGain:  0.50,
   volume:     0.60,
   treble:     0.50,
   bass:       0.50,
   reverb:     0.30,
   rate:       0.20,
-  depth:      0.00,  // drives water displacement amplitude
+  depth:      0.00,
   outputGain: 0.70,
 
-  frameCount: 0,
-  lastTime:   0,
-  fps:        0,
-  fluidCpuMs: 0,
+  // Audio level pushed from C++ at 30 Hz
+  audioLevel: 0.0,
+
+  frameCount: 0, lastTime: 0, fps: 0,
 };
 
-// ────────────────────────────────────────────────────────────────
-// DOM REFS
-// ────────────────────────────────────────────────────────────────
+// ── DOM REFS ─────────────────────────────────────────────────────
 const canvas     = document.getElementById('webgl-canvas');
 const loadStatus = document.getElementById('load-status');
+const cabSelect  = document.getElementById('cab-select');
+const revSelect  = document.getElementById('rev-select');
+const cabToggle  = document.getElementById('cab-toggle');
+const revToggle  = document.getElementById('rev-toggle');
 
 const valEls = {
   inputGain:  document.getElementById('val-inputGain'),
@@ -96,154 +72,76 @@ const valEls = {
   outputGain: document.getElementById('val-outputGain'),
 };
 
-// ────────────────────────────────────────────────────────────────
-// RENDERER
-// ────────────────────────────────────────────────────────────────
-const renderer = new THREE.WebGLRenderer({
-  canvas,
-  antialias: true,
-  alpha: false,
-  powerPreference: 'high-performance',
-});
+// ── RENDERER ─────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-// Required for fluidMat.clippingPlanes to work
 renderer.localClippingEnabled = true;
 
-// ────────────────────────────────────────────────────────────────
-// SCENE + CAMERA
-// ────────────────────────────────────────────────────────────────
+// ── SCENE + CAMERA ───────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x3A5268); // mid-dark slate — contrast without harshness
+scene.background = new THREE.Color(0x3A5268);
 
 const camera = new THREE.PerspectiveCamera(CFG.CAM_FOV, 1, CFG.CAM_NEAR, CFG.CAM_FAR);
 camera.position.set(...CFG.CAM_POS);
 camera.lookAt(...CFG.CAM_TARGET);
 
-// ────────────────────────────────────────────────────────────────
-// ORBIT CONTROLS
-// ────────────────────────────────────────────────────────────────
+// ── ORBIT CONTROLS ───────────────────────────────────────────────
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.06;
-controls.enablePan = false;
-controls.minDistance = 2.5;
-controls.maxDistance = 14;
+controls.enableDamping  = true;
+controls.dampingFactor  = 0.06;
+controls.enablePan      = false;
+controls.minDistance    = 2.5;
+controls.maxDistance    = 14;
 controls.target.set(...CFG.CAM_TARGET);
 
-// Track user interaction to pause auto-rotation
 let isOrbitActive = false;
-controls.addEventListener('start', () => { isOrbitActive = true; });
-controls.addEventListener('end', () => { isOrbitActive = false; });
+controls.addEventListener('start', () => { isOrbitActive = true;  });
+controls.addEventListener('end',   () => { isOrbitActive = false; });
 
-// ────────────────────────────────────────────────────────────────
-// ENVIRONMENT MAP
-// PMREMGenerator wraps the RoomEnvironment scene into a cube map
-// used by MeshPhysicalMaterial for reflections and refraction.
-// ────────────────────────────────────────────────────────────────
-const pmrem = new THREE.PMREMGenerator(renderer);
+// ── ENVIRONMENT ──────────────────────────────────────────────────
+const pmrem   = new THREE.PMREMGenerator(renderer);
 const roomEnv = new RoomEnvironment();
 scene.environment = pmrem.fromScene(roomEnv).texture;
-roomEnv.dispose();
-pmrem.dispose();
+roomEnv.dispose(); pmrem.dispose();
 
-// ────────────────────────────────────────────────────────────────
-// LIGHTING
-// ────────────────────────────────────────────────────────────────
-// Very low dark-blue ambient so the glass isn't flat — drama comes from
-// the key and water lights punching through the dark.
-const ambientLight = new THREE.AmbientLight(0x0a1828, 0.6);
-scene.add(ambientLight);
+// ── LIGHTING ─────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x0a1828, 0.6));
 
-// Hard warm key from upper-right — strong specular on the glass clearcoat
-const keyLight = new THREE.DirectionalLight(0xffecd0, 1.8);
+const keyLight  = new THREE.DirectionalLight(0xffecd0, 1.8);
 keyLight.position.set(3, 5, 3);
 scene.add(keyLight);
 
-// Cold blue rim from back-left — silhouettes the glass edge
-const rimLight = new THREE.DirectionalLight(0x1a3fff, 0.6);
+const rimLight  = new THREE.DirectionalLight(0x1a3fff, 0.6);
 rimLight.position.set(-3, 1, -5);
 scene.add(rimLight);
 
-// Intense blue uplight — illuminates water from below, bleeds through glass
 const waterLight = new THREE.PointLight(0x00aaff, 5.0, 6);
 waterLight.position.set(0, -0.6, 0);
 scene.add(waterLight);
 
-// Narrow top spot — catches the glass top edge
 const topSpot = new THREE.DirectionalLight(0xffffff, 0.4);
 topSpot.position.set(0, 10, 1);
 scene.add(topSpot);
 
-// ────────────────────────────────────────────────────────────────
-// GLASS MATERIAL  (transmission)
-// Water mesh is transparent:false → opaque render pass → captured
-// in Three.js's transmission background buffer before glass draws.
-// This is how transmission correctly shows objects inside the mesh.
-// ────────────────────────────────────────────────────────────────
-// ────────────────────────────────────────────────────────────────
-// GLASS MATERIAL — transmission with anti-glitch settings
-//
-// Glitch sources and fixes:
-//   roughness > 0  → blurry sample hits off-screen pixels → set 0.0
-//   ior > ~1.25    → large refraction offset → set 1.18
-//   DoubleSide     → transmission applied twice (outer+inner face)
-//                    → double refraction glitch → use FrontSide
-// ────────────────────────────────────────────────────────────────
-// clearcoat adds the sharp specular "lacquer" layer that defines glass visually.
-// roughness on the base layer creates imperfection.  transmission < 1.0 makes
-// it feel solid rather than invisible.
+// ── GLASS MATERIAL ───────────────────────────────────────────────
 const glassMaterial = new THREE.MeshPhysicalMaterial({
-  color:               0xe8f4ff,
-  transmission:        0.88,
-  opacity:             1.0,
-  roughness:           0.08,
-  metalness:           0.0,
-  ior:                 1.18,
-  thickness:           0.4,
-  clearcoat:           1.0,
-  clearcoatRoughness:  0.05,
-  transparent:         true,
-  envMapIntensity:     0.45,
-  attenuationColor:    new THREE.Color(0xc8e8ff),
-  attenuationDistance: 4.0,
-  side:                THREE.FrontSide,
-  depthWrite:          false,
+  color: 0xe8f4ff, transmission: 0.88, opacity: 1.0,
+  roughness: 0.08, metalness: 0.0, ior: 1.18, thickness: 0.4,
+  clearcoat: 1.0, clearcoatRoughness: 0.05,
+  transparent: true, envMapIntensity: 0.45,
+  attenuationColor: new THREE.Color(0xc8e8ff), attenuationDistance: 4.0,
+  side: THREE.FrontSide, depthWrite: false,
 });
 
-// ────────────────────────────────────────────────────────────────
-// WATER — two planes, zero seam
-//
-// A rippling surface + a static dark floor gives genuine depth
-// perception without needing any side-wall geometry.  Side walls
-// would require updating top-edge verts every frame to stay flush
-// with the displaced surface — costly and still visually fragile.
-//
-// Both planes are transparent:false → opaque pass → captured in
-// the transmission background buffer before glass draws.
-// ────────────────────────────────────────────────────────────────
+// ── WATER ────────────────────────────────────────────────────────
+const waterGeo  = new THREE.BoxGeometry(1, 1, 1, 22, 1, 22);
+const posAttr   = waterGeo.attributes.position;
 
-// ── Water: single BoxGeometry, top face + top-wall edges displace ─
-//
-// BoxGeometry(1,1,1, N,1,N) — heightSegments=1 is critical:
-//   • top face has N×N quads  → high-res surface for waves
-//   • side walls each have N×1 quads → top-edge verts at y=0.5
-//
-// All vertices with y≈0.5 (top face + top edges of all four walls)
-// are displaced together in the render loop.  The walls below y=0.5
-// stay flat.  Because the top wall-edge verts move with the surface,
-// there is NO visible seam between the water surface and the sides.
-//
-// transparent:false → opaque pass → captured in transmission buffer.
-// ────────────────────────────────────────────────────────────────
-const waterGeo = new THREE.BoxGeometry(1, 1, 1, 22, 1, 22);
-const posAttr = waterGeo.attributes.position;
-
-// Collect indices of all top vertices (y ≈ +0.5 in unit-box local space)
-const topVtxIdx = [];
-const topOrigXZ = [];
+const topVtxIdx  = [];
+const topOrigXZ  = [];
 for (let i = 0; i < posAttr.count; i++) {
   if (Math.abs(posAttr.getY(i) - 0.5) < 0.001) {
     topVtxIdx.push(i);
@@ -251,85 +149,56 @@ for (let i = 0; i < posAttr.count; i++) {
   }
 }
 
-// transparent:true + depthWrite:false = water blends naturally with the frosted
-// glass above it.  Both are alpha-sorted transparent objects so the layering works.
 const waterMat = new THREE.MeshStandardMaterial({
-  color:           0x3AACC8,   // cool slate-blue water — matches scene palette
-  emissive:        new THREE.Color(0x003050).multiplyScalar(0.25),
-  roughness:       0.06,       // smoother = more glassy sheen per facet
-  metalness:       0.15,
-  envMapIntensity: 0.7,
-  flatShading:     true,
-  side:            THREE.DoubleSide,
-  transparent:     true,
-  opacity:         0.72,
-  depthWrite:      false,
+  color: 0x3AACC8, emissive: new THREE.Color(0x003050).multiplyScalar(0.25),
+  roughness: 0.06, metalness: 0.15, envMapIntensity: 0.7,
+  flatShading: true, side: THREE.DoubleSide,
+  transparent: true, opacity: 0.72, depthWrite: false,
 });
 const waterMesh = new THREE.Mesh(waterGeo, waterMat);
-waterMesh.userData.wasDisplaced = false;
 
-// fillH set in onLoad — converts world amplitude → local amplitude
 let waterFillH = 1.0;
 
-// Water placement — tuned values baked in from debug session
-const WATER_X_MULT  = 0.77;
-const WATER_Z_MULT  = 0.88;
+const WATER_X_MULT    = 0.77;
+const WATER_Z_MULT    = 0.88;
 const WATER_FLOOR_PCT = 0.18;
 const WATER_LEVEL_PCT = 0.50;
 
-let _ampBox  = null;
-let _ampSize = null;
-let _ampCX   = 0;
-let _ampCZ   = 0;
+let _ampBox = null, _ampSize = null, _ampCX = 0, _ampCZ = 0;
 
 function applyWaterDimensions() {
   if (!_ampBox) return;
   const floorY = _ampBox.min.y + _ampSize.y * WATER_FLOOR_PCT;
   const waterY = _ampBox.min.y + _ampSize.y * WATER_LEVEL_PCT;
   const fillH  = Math.max(0.01, waterY - floorY);
-  const yOffset = _ampSize.y * 0.04; // sloped-front-panel compensation
+  const yOff   = _ampSize.y * 0.04;
   waterMesh.scale.set(_ampSize.x * WATER_X_MULT, fillH, _ampSize.z * WATER_Z_MULT);
-  waterMesh.position.set(_ampCX, floorY + fillH * 0.5 - yOffset, _ampCZ);
+  waterMesh.position.set(_ampCX, floorY + fillH * 0.5 - yOff, _ampCZ);
   waterFillH = fillH;
 }
 
 const displayGroup = new THREE.Group();
-displayGroup.position.y = 0.28; // lift amp+water up in the viewport
+displayGroup.position.y = 0.28;
 scene.add(displayGroup);
 displayGroup.add(waterMesh);
 
+// ── OBJ LOADER ───────────────────────────────────────────────────
+let ampGroup = null;
 
-// ────────────────────────────────────────────────────────────────
-// OBJ LOADER
-// ────────────────────────────────────────────────────────────────
-let ampGroup = null;   // Set once the model loads; used by the render loop
-
-const objLoader = new OBJLoader();
-objLoader.load(
-  CFG.OBJ_PATH,
-
-  // ── onLoad ────────────────────────────────────────────────
+new OBJLoader().load(CFG.OBJ_PATH,
   (object) => {
-    // Auto-scale so the model fits within a 3-unit sphere
-    const box = new THREE.Box3().setFromObject(object);
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const scale = 3.0 / maxDim;
+    const box    = new THREE.Box3().setFromObject(object);
+    const size   = box.getSize(new THREE.Vector3());
+    const scale  = 3.0 / Math.max(size.x, size.y, size.z);
     object.scale.setScalar(scale);
-
-    // Center at world origin
     const centre = box.getCenter(new THREE.Vector3());
     object.position.copy(centre.multiplyScalar(-scale));
 
-    // Merge all OBJ sub-meshes into ONE geometry → ONE glass surface.
-    // Multiple sub-meshes each apply transmission independently, stacking
-    // refraction artifacts.  A single merged mesh has exactly one pass.
     const subGeos = [];
     object.updateWorldMatrix(true, true);
     object.traverse(child => {
       if (!child.isMesh) return;
-      const g = child.geometry.clone().applyMatrix4(child.matrixWorld);
-      // Strip to position + normal only (glass material doesn't need UVs)
+      const g    = child.geometry.clone().applyMatrix4(child.matrixWorld);
       const lean = new THREE.BufferGeometry();
       lean.setAttribute('position', g.attributes.position);
       if (g.attributes.normal) lean.setAttribute('normal', g.attributes.normal);
@@ -343,152 +212,158 @@ objLoader.load(
       merged.computeVertexNormals();
       ampMesh = new THREE.Mesh(merged, glassMaterial);
     } else {
-      // Fallback: add original group if merge fails
       ampMesh = object;
       ampMesh.traverse(c => { if (c.isMesh) c.material = glassMaterial; });
     }
+
     ampGroup = ampMesh;
     displayGroup.add(ampMesh);
 
-    // Store bounds so debug sliders can re-apply transforms at any time
     _ampBox  = new THREE.Box3().setFromObject(object);
     _ampSize = _ampBox.getSize(new THREE.Vector3());
     _ampCX   = (_ampBox.min.x + _ampBox.max.x) * 0.5;
     _ampCZ   = (_ampBox.min.z + _ampBox.max.z) * 0.5;
+    applyWaterDimensions();
 
-    applyWaterDimensions(); // uses current slider values as initial placement
-
-    loadStatus.textContent = 'MODEL LOADED';
     loadStatus.textContent = 'READY';
   },
-
-  // ── onProgress ────────────────────────────────────────────
   (xhr) => {
-    if (xhr.total > 0) {
-      const pct = Math.round((xhr.loaded / xhr.total) * 100);
-      loadStatus.textContent = 'LOADING MODEL... ' + pct + '%';
-    }
+    if (xhr.total > 0)
+      loadStatus.textContent = `LOADING ${Math.round(xhr.loaded / xhr.total * 100)}%`;
   },
-
-  // ── onError ───────────────────────────────────────────────
-  (err) => {
-    loadStatus.textContent = 'MODEL ERROR — ENSURE amp.obj IS IN ROOT DIR';
+  () => {
     loadStatus.textContent = 'MODEL ERROR';
-    console.error('[PINAM] OBJLoader failed:', err);
-
-    // Fallback wireframe so the interface isn't completely empty
     const fallback = new THREE.Mesh(
       new THREE.BoxGeometry(1.8, 1.1, 0.85),
-      new THREE.MeshPhysicalMaterial({
-        color: 0xf5a623, wireframe: true, transparent: true, opacity: 0.4,
-      })
+      new THREE.MeshPhysicalMaterial({ color: 0xf5a623, wireframe: true, transparent: true, opacity: 0.4 })
     );
     scene.add(fallback);
     ampGroup = fallback;
   }
 );
 
-// ────────────────────────────────────────────────────────────────
-// FLUID VERTEX DISPLACEMENT
-// Called once per frame.  Pure CPU — no custom shader needed at
-// this scale (52×52 = 2704 vertices).  Upgrade to a GPGPU compute
-// pass via THREE.WebGLRenderer.compute() when vertex count > 100k.
+// ── FLUID DISPLACEMENT ───────────────────────────────────────────
 //
-// JUCE HOOK: replace STATE.thump read with normalised APVTS value.
-// ────────────────────────────────────────────────────────────────
-function updateFluidDisplacement(timeMs) {
-  const localAmp = (STATE.depth * CFG.FLUID_MAX_AMP) / Math.max(waterFillH, 0.01);
-  const t        = timeMs * CFG.FLUID_TIME_SCALE;
+// Two-layer audio response:
+//   _audioFast  — 25ms attack / 100ms release  → instant ripple response
+//   _audioSwell — 150ms attack / 3.0s release  → slow rolling energy
+//
+// The swell takes 3 seconds to fully decay so the water keeps
+// moving beautifully after notes stop — "resonance" feel.
+//
+// Ripples are outward-propagating radial rings (stone-in-water),
+// strongest at center, Gaussian-attenuated toward edges.
 
+let _audioFast  = 0;
+let _audioSwell = 0;
+
+function updateFluidDisplacement(timeMs, deltaMs) {
+  const t  = timeMs * CFG.FLUID_TIME_SCALE;
+  const dt = Math.min(deltaMs * 0.001, 0.05); // seconds, capped
+
+  // ── Attack/release smoothing (frame-rate independent) ────────────
+  const raw = Math.min(1.0, STATE.audioLevel);
+
+  const faCoeff = raw > _audioFast
+    ? 1 - Math.exp(-dt / 0.025)   // 25 ms attack  — snap to transient
+    : 1 - Math.exp(-dt / 0.10);   // 100 ms release — hold briefly
+  _audioFast += (raw - _audioFast) * faCoeff;
+
+  const saCoeff = _audioFast > _audioSwell
+    ? 1 - Math.exp(-dt / 0.15)    // 150 ms attack  — builds gradually
+    : 1 - Math.exp(-dt / 3.0);    // 3.0 s  release — lingers long
+  _audioSwell += (_audioFast - _audioSwell) * saCoeff;
+
+  // ── Amplitudes ───────────────────────────────────────────────────
+  const wf = Math.max(waterFillH, 0.01);
+
+  // Knob depth + slow swell energy → large rolling waves
+  const swellAmp  = (STATE.depth * 0.55 + _audioSwell * 0.45)
+                    * CFG.FLUID_MAX_AMP / wf;
+
+  // Fast envelope → outward ring ripples (subtle)
+  const rippleAmp = _audioFast * 0.20 * CFG.FLUID_MAX_AMP / wf;
+
+  // Water light pulses gently with the slow swell, not the raw level
+  waterLight.intensity = 5.0 + _audioSwell * 5.5;
+
+  // ── Per-vertex displacement ──────────────────────────────────────
   for (let ii = 0; ii < topVtxIdx.length; ii++) {
     const x = topOrigXZ[ii * 2];
     const z = topOrigXZ[ii * 2 + 1];
+    const r = Math.sqrt(x * x + z * z);   // radial distance from center
 
-    // Idle: subtle always-on base — alive even at depth=0
+    // ── Idle: always-on micro-motion ─────────────────────────────
     const idle = Math.sin(x * 3.5 + t * 0.55) * Math.cos(z * 3.0 + t * 0.48) * 0.022;
 
-    // ── Primary swells — dominant, continuous, no envelope ────
+    // ── Primary swells (depth + swell energy) ────────────────────
     const sw1 = Math.sin(x * CFG.FLUID_FREQ_X + t)
               * Math.cos(z * CFG.FLUID_FREQ_Z + t * 0.72 + CFG.FLUID_PHASE);
     const sw2 = Math.sin((x * 0.65 + z * 0.9) * 1.9 + t * 0.85) * 0.65;
 
-    // ── Decay envelopes — each ripple band has its own lifecycle.
-    // pow(max(0, sin(slowT)), 2.2) spends ~50% of time near zero
-    // then rises to a peak and falls back — wave groups appear, crest, die.
-    // Different slow frequencies mean bands never all peak simultaneously.
-    const e1 = Math.pow(Math.max(0.0, Math.sin(t * 0.62 + 0.00)), 2.2);
-    const e2 = Math.pow(Math.max(0.0, Math.sin(t * 0.79 + 2.09)), 2.2);
-    const e3 = Math.pow(Math.max(0.0, Math.sin(t * 0.51 + 4.19)), 2.2);
-    const e4 = Math.pow(Math.max(0.0, Math.sin(t * 0.94 + 1.05)), 2.2);
+    // ── Organic decay envelopes ───────────────────────────────────
+    const e1 = Math.pow(Math.max(0, Math.sin(t * 0.62 + 0.00)), 2.2);
+    const e2 = Math.pow(Math.max(0, Math.sin(t * 0.79 + 2.09)), 2.2);
+    const e3 = Math.pow(Math.max(0, Math.sin(t * 0.51 + 4.19)), 2.2);
+    const e4 = Math.pow(Math.max(0, Math.sin(t * 0.94 + 1.05)), 2.2);
 
-    // ── Decaying ripple bands ──────────────────────────────────
-    const r1 = Math.sin(x *  9.0 + z *  7.0 + t * 3.3) * e1 * 0.52;
-    const r2 = Math.cos(x *  7.0 - z * 11.0 + t * 2.9) * e2 * 0.45;
-    const r3 = Math.sin(x * 13.0 + z *  5.5 + t * 3.8) * e3 * 0.40;
-    const r4 = Math.cos(x *  6.0 + z * 14.0 + t * 2.5) * e4 * 0.36;
+    const rb1 = Math.sin(x *  9.0 + z *  7.0 + t * 3.3) * e1 * 0.52;
+    const rb2 = Math.cos(x *  7.0 - z * 11.0 + t * 2.9) * e2 * 0.45;
+    const rb3 = Math.sin(x * 13.0 + z *  5.5 + t * 3.8) * e3 * 0.40;
+    const rb4 = Math.cos(x *  6.0 + z * 14.0 + t * 2.5) * e4 * 0.36;
+    const micro = (Math.sin(x * 19.0 + t * 5.2) + Math.cos(z * 16.0 - t * 4.5)) * e2 * 0.10;
 
-    // ── Fine micro-ripple — decays with e1 so it pulses with band 1
-    const micro = (Math.sin(x * 19.0 + t * 5.2) + Math.cos(z * 16.0 - t * 4.5))
-                * e2 * 0.10;
+    // ── Audio ripple: outward rings from center ───────────────────
+    // sin(r * k - t * speed) creates inward-→-outward propagation.
+    // exp(-r * falloff) keeps rings visible at center, vanishing at edges.
+    const ring = Math.sin(r * 6.5 - t * 7.0) * Math.exp(-r * 0.9);
+    // Cross-hatch surface texture for detail
+    const tex  = (Math.sin(x * 8.0 + t * 4.5) + Math.cos(z * 7.5 - t * 4.0)) * 0.5;
+    const ripple = rippleAmp > 0.001
+      ? rippleAmp * (ring * 0.65 + tex * 0.35)
+      : 0;
 
-    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (sw1 + sw2 + r1 + r2 + r3 + r4 + micro));
+    posAttr.setY(topVtxIdx[ii],
+      0.5 + idle
+           + swellAmp * (sw1 + sw2 + rb1 + rb2 + rb3 + rb4 + micro)
+           + ripple);
   }
 
   posAttr.needsUpdate = true;
 }
 
-// ────────────────────────────────────────────────────────────────
-// SVG ROTARY KNOB INTERACTION
-//
-// Each knob is an SVG with class .knob-svg and data-param / data-default.
-// Vertical drag maps to value: 200px drag = full range.
-// Double-click resets to default.  Scrollwheel fine-tunes.
-//
-// JUCE HOOK: replace the STATE writes here with APVTS parameter
-//   callbacks received via WebView postMessage.
-// ────────────────────────────────────────────────────────────────
-// ────────────────────────────────────────────────────────────────
-// ROTARY KNOB SYSTEM
-//
-// Valhalla-style: filled circle + rotating notch indicator.
-// Global pointermove/up on window ensures drag never "drops" when
-// the cursor leaves the SVG element mid-drag.
-//
-// JUCE HOOK: replace STATE writes with APVTS postMessage callbacks.
-// ────────────────────────────────────────────────────────────────
-let _drag = null; // { svg, valEl, param, value, startY }
+// ── KNOB INTERACTION ─────────────────────────────────────────────
+let _drag = null;
 
 function applyKnob(svg, valEl, param, v) {
-  const c = Math.max(0, Math.min(1, v));
+  const c   = Math.max(0, Math.min(1, v));
   STATE[param] = c;
   const deg = -135 + c * 270;
   svg.querySelector('.k-notch').setAttribute('transform', `rotate(${deg.toFixed(1)} 30 30)`);
   if (valEl) valEl.textContent = Math.round(c * 100).toString().padStart(3, '0');
+  // JUCE bridge: notify backend
+  window.__JUCE__?.backend?.emitEvent('paramChanged', { key: param, value: c });
 }
 
 document.querySelectorAll('.knob-svg').forEach(svg => {
   const param = svg.dataset.param;
-  const valEl = valEls[param] || null;
+  const valEl = valEls[param] ?? null;
   let   val   = parseFloat(svg.dataset.default ?? '0');
 
   applyKnob(svg, valEl, param, val);
 
   svg.addEventListener('pointerdown', e => {
-    // Use STATE[param] so drag always starts from the current value,
-    // not from the stale closure variable.
     _drag = { svg, valEl, param, value: STATE[param], startY: e.clientY };
     svg.classList.add('active');
     e.preventDefault();
   });
-
   svg.addEventListener('dblclick', () => {
     val = parseFloat(svg.dataset.default ?? '0');
     applyKnob(svg, valEl, param, val);
   });
-
   svg.addEventListener('wheel', e => {
     e.preventDefault();
-    val = Math.max(0, Math.min(1, val - e.deltaY / 1800));
+    val = Math.max(0, Math.min(1, STATE[param] - e.deltaY / 1800));
     applyKnob(svg, valEl, param, val);
   }, { passive: false });
 });
@@ -496,139 +371,123 @@ document.querySelectorAll('.knob-svg').forEach(svg => {
 window.addEventListener('pointermove', e => {
   if (!_drag) return;
   const { svg, valEl, param, startY } = _drag;
-  const delta = (startY - e.clientY) / 180;
-  _drag.value = Math.max(0, Math.min(1, _drag.value + delta));
+  _drag.value = Math.max(0, Math.min(1, _drag.value + (startY - e.clientY) / 180));
   _drag.startY = e.clientY;
   applyKnob(svg, valEl, param, _drag.value);
 });
-
 window.addEventListener('pointerup', () => {
   if (_drag) { _drag.svg.classList.remove('active'); _drag = null; }
 });
 
-
-// ════════════════════════════════════════════════════════════════
-// JUCE INTEGRATION
-//
-// Three entry points — use whichever matches your plugin architecture:
-//
-//  1. Direct JS call (WebBrowserComponent::evaluateJavascript)
-//     JUCE code:  webView.evaluateJavascript ("PINAM.setParam('depth', 0.8)");
-//
-//  2. Batch update
-//     JUCE code:  webView.evaluateJavascript ("PINAM.setAll({gain:0.5,depth:0.3})");
-//
-//  3. WebSocket (JUCE runs a WS server, JS connects automatically)
-//     Send JSON: { "type": "param", "key": "depth", "value": 0.8 }
-//             or { "type": "setAll", "params": { "gain": 0.5, ... } }
-//
-// All paths write to STATE[key] and update the knob UI.
-// ════════════════════════════════════════════════════════════════
-
+// ── PUBLIC JUCE API ──────────────────────────────────────────────
 function _juceSetParam(key, raw) {
   if (!(key in STATE)) return;
-  const v = Math.max(0, Math.min(1, parseFloat(raw)));
+  const v   = Math.max(0, Math.min(1, parseFloat(raw)));
   STATE[key] = v;
   const svg   = document.querySelector(`.knob-svg[data-param="${key}"]`);
   const valEl = valEls[key] ?? null;
   if (svg) applyKnob(svg, valEl, key, v);
 }
 
-// Global object JUCE calls into
 window.PINAM = {
-  // Set a single parameter — JUCE: PINAM.setParam('gain', 0.75)
   setParam: _juceSetParam,
-
-  // Set all parameters at once — JUCE: PINAM.setAll({gain:0.5, depth:0.3})
-  setAll(params) {
-    Object.entries(params).forEach(([k, v]) => _juceSetParam(k, v));
-  },
-
-  // Read current value — JUCE: PINAM.getParam('depth')
+  setAll(params) { Object.entries(params).forEach(([k, v]) => _juceSetParam(k, v)); },
   getParam: (key) => STATE[key] ?? 0,
-
-  // Full state snapshot — useful for preset save on the JUCE side
-  snapshot: () => ({
-    inputGain:  STATE.inputGain,
-    volume:     STATE.volume,
-    treble:     STATE.treble,
-    bass:       STATE.bass,
-    reverb:     STATE.reverb,
-    rate:       STATE.rate,
-    depth:      STATE.depth,
-    outputGain: STATE.outputGain,
-  }),
+  snapshot: () => ({ ...STATE }),
 };
 
-// WebSocket bridge — auto-connects to JUCE's WS server if running.
-// JUCE plugin: start a WebSocketServer on port 9001 in prepareToPlay().
-(function connectBridge(port = 9001) {
-  try {
-    const ws = new WebSocket(`ws://localhost:${port}`);
-    ws.onmessage = ({ data }) => {
-      try {
-        const msg = JSON.parse(data);
-        if (msg.type === 'param')  PINAM.setParam(msg.key, msg.value);
-        if (msg.type === 'setAll') PINAM.setAll(msg.params);
-      } catch (_) {}
-    };
-    ws.onclose = () => setTimeout(() => connectBridge(port), 3000); // auto-reconnect
-  } catch (_) {} // silently skip if WebSocket not available (e.g. file://)
-}());
+// ── IO: TOGGLE HELPER ────────────────────────────────────────────
+function setToggleState(btn, enabled) {
+  btn.dataset.on = enabled ? 'true' : 'false';
+  btn.classList.toggle('off', !enabled);
+}
 
-// ────────────────────────────────────────────────────────────────
-// RESPONSIVE RESIZE
-// ResizeObserver fires on first layout and on every subsequent
-// container resize — more reliable than window 'resize' for canvas
-// elements inside flex/grid layouts.
-// ────────────────────────────────────────────────────────────────
-const resizeObserver = new ResizeObserver((entries) => {
-  for (const entry of entries) {
-    const w = Math.floor(entry.contentRect.width);
-    const h = Math.floor(entry.contentRect.height);
+// ── IO: JUCE EVENT LISTENERS ──────────────────────────────────────
+window.__JUCE__?.backend?.addEventListener('setParam', (data) => {
+  if (data?.key) _juceSetParam(data.key, data.value);
+});
+
+window.__JUCE__?.backend?.addEventListener('audioLevel', (data) => {
+  STATE.audioLevel = (data?.value ?? 0);
+});
+
+window.__JUCE__?.backend?.addEventListener('initData', (data) => {
+  if (!data) return;
+
+  // Populate cab IR select
+  if (Array.isArray(data.cabs)) {
+    cabSelect.innerHTML = '';
+    data.cabs.forEach((name, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = name;
+      cabSelect.appendChild(opt);
+    });
+    cabSelect.selectedIndex = data.currentCab ?? 0;
+  }
+
+  // Populate reverb IR select
+  if (Array.isArray(data.reverbs)) {
+    revSelect.innerHTML = '';
+    data.reverbs.forEach((name, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = name;
+      revSelect.appendChild(opt);
+    });
+    revSelect.selectedIndex = data.currentReverb ?? 0;
+  }
+
+  if (data.cabEnabled    !== undefined) setToggleState(cabToggle, data.cabEnabled);
+  if (data.reverbEnabled !== undefined) setToggleState(revToggle, data.reverbEnabled);
+});
+
+// ── IO: UI → JUCE ────────────────────────────────────────────────
+cabSelect.addEventListener('change', (e) => {
+  window.__JUCE__?.backend?.emitEvent('selectCab', { index: parseInt(e.target.value, 10) });
+});
+revSelect.addEventListener('change', (e) => {
+  window.__JUCE__?.backend?.emitEvent('selectReverb', { index: parseInt(e.target.value, 10) });
+});
+cabToggle.addEventListener('click', () => {
+  const enabled = cabToggle.dataset.on !== 'true';
+  setToggleState(cabToggle, enabled);
+  window.__JUCE__?.backend?.emitEvent('cabBypass', { enabled });
+});
+revToggle.addEventListener('click', () => {
+  const enabled = revToggle.dataset.on !== 'true';
+  setToggleState(revToggle, enabled);
+  window.__JUCE__?.backend?.emitEvent('reverbBypass', { enabled });
+});
+
+// ── RESPONSIVE RESIZE ────────────────────────────────────────────
+new ResizeObserver((entries) => {
+  for (const e of entries) {
+    const w = Math.floor(e.contentRect.width);
+    const h = Math.floor(e.contentRect.height);
     if (w > 0 && h > 0) {
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     }
   }
-});
-resizeObserver.observe(canvas);
+}).observe(canvas);
 
-// ────────────────────────────────────────────────────────────────
-// RENDER LOOP
-// ────────────────────────────────────────────────────────────────
-let _fpsAccumMs = 0;
-let _fpsFrames = 0;
-
+// ── RENDER LOOP ───────────────────────────────────────────────────
 function animate(nowMs) {
   requestAnimationFrame(animate);
-
-  // FPS — averaged over a 500 ms window
   const delta = nowMs - (STATE.lastTime || nowMs);
   STATE.lastTime = nowMs;
-  _fpsAccumMs += delta;
-  _fpsFrames += 1;
-  if (_fpsAccumMs >= 500) {
-    STATE.fps = (_fpsFrames / _fpsAccumMs) * 1000;
-    _fpsAccumMs = 0;
-    _fpsFrames = 0;
-  }
   STATE.frameCount++;
 
-  // Fluid vertex displacement (CPU-timed for telemetry)
-  const t0 = performance.now();
-  updateFluidDisplacement(nowMs);
-  STATE.fluidCpuMs = performance.now() - t0;
-
-  // Rotate the whole display group (amp + water together) so they stay aligned.
-  // Pauses when the user grabs orbit controls.
-  if (ampGroup && !isOrbitActive) {
-    displayGroup.rotation.y += CFG.AUTO_ROTATE_SPEED;
-  }
+  updateFluidDisplacement(nowMs, delta);
+  if (ampGroup && !isOrbitActive) displayGroup.rotation.y += CFG.AUTO_ROTATE_SPEED;
 
   controls.update();
   renderer.render(scene, camera);
 }
-
 requestAnimationFrame(animate);
+
+// ── SIGNAL JUCE: PAGE READY ───────────────────────────────────────
+// Emitted after all listeners are wired so C++ can safely send initData + params
+window.__JUCE__?.backend?.emitEvent('pageReady', {});

@@ -1,17 +1,18 @@
 /* ================================================================
-   PINAM — plugin UI
+   TONEKEEP — plugin UI
    Aesthetic: Teenage Engineering / Valhalla DSP minimalism
    Font: Hack (closest CDN proxy for Hack Nerd Font)
-   Fixed 880 × 480 px window
+   Fixed 920 × 560 px window
    ================================================================ */
 
 :root {
-  --sky:      #E4EAF0;   /* cool blue-grey slate */
-  --knob:     #1E2530;   /* dark charcoal, cool-toned */
-  --notch:    #4AB8DE;   /* cool teal — matches water + scene slate */
-  --text:     #182038;   /* deep cool navy */
-  --text-dim: #3A5878;   /* saturated slate blue */
-  --line:     #5A7898;   /* brighter steel for brackets */
+  --sky:      #E4EAF0;
+  --sky-deep: #D8E1E8;   /* slightly darker for IO section */
+  --knob:     #1E2530;
+  --notch:    #4AB8DE;
+  --text:     #182038;
+  --text-dim: #3A5878;
+  --line:     #5A7898;
   --font:     'Hack', 'JetBrains Mono', 'Courier New', monospace;
 }
 
@@ -19,8 +20,9 @@
 
 html, body {
   width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  background: #C8D4DE; /* deeper cool slate — plugin lifts off it */
+  margin: 0; padding: 0;
+  overflow: hidden;
+  background: var(--sky);
   font-family: var(--font);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -28,17 +30,12 @@ html, body {
   user-select: none;
 }
 
-/* ── Plugin shell ─────────────────────────────────────────────── */
+/* ── Plugin shell — fills the entire WebBrowserComponent ─────── */
 #plugin {
-  width: 880px; height: 480px;
+  width: 100%; height: 100%;
   display: flex; flex-direction: column;
   background: linear-gradient(145deg, #EDF2F7 0%, #E4EAF0 48%, #DAE2E8 100%);
   overflow: hidden;
-  flex-shrink: 0;
-  border: 1.5px solid #A0B0C0;
-  box-shadow:
-    0 10px 48px rgba(40, 60, 90, 0.24),
-    inset 0 1px 0 rgba(255,255,255,0.60);
 }
 
 /* ── 3D Viewport ──────────────────────────────────────────────── */
@@ -60,8 +57,6 @@ html, body {
 }
 
 /* ── Corner anchor marks ──────────────────────────────────────── */
-/* L-bracket (2 sides of a border-box) + stacked text labels.
-   Inspired by camera viewfinders and PCB registration marks. */
 .cnr {
   position: absolute;
   top: 14px;
@@ -83,23 +78,17 @@ html, body {
   border-right: 6px solid #E4EAF1;
 }
 .cnr-text {
-  font-size: 13px;
-  font-weight: 700;
-  color: #E4EAF1;
-  letter-spacing: 0.18em;
-  white-space: nowrap;
-  line-height: 1;
+  font-size: 13px; font-weight: 700;
+  color: #E4EAF1; letter-spacing: 0.18em;
+  white-space: nowrap; line-height: 1;
 }
 .cnr-sub {
-  font-size: 10px;
-  font-weight: 700;
-  color: #8AAEC8;
-  letter-spacing: 0.14em;
-  white-space: nowrap;
-  line-height: 1;
+  font-size: 10px; font-weight: 700;
+  color: #8AAEC8; letter-spacing: 0.14em;
+  white-space: nowrap; line-height: 1;
 }
 
-/* ── Controls strip ───────────────────────────────────────────── */
+/* ── Knobs strip ──────────────────────────────────────────────── */
 #controls {
   flex-shrink: 0;
   height: 108px;
@@ -107,59 +96,120 @@ html, body {
   align-items: center;
   justify-content: space-evenly;
   padding: 0 32px;
-  background: var(--sky);   /* same as everything — no separator */
+  background: var(--sky);
+  border-top: 1px solid rgba(90, 120, 152, 0.18);
 }
 
-/* ── Single knob cell ─────────────────────────────────────────── */
 .k {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 3px;
   cursor: ns-resize;
 }
 
 .k-lbl {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  letter-spacing: 0.18em;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-dim); letter-spacing: 0.18em;
   white-space: nowrap;
 }
 
 .k-val {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
+  font-size: 11px; font-weight: 700;
+  color: var(--text); font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
 }
 
-/* ── SVG knob ─────────────────────────────────────────────────── */
 .knob-svg {
   width: 56px; height: 56px;
-  display: block;
-  touch-action: none;
-  cursor: ns-resize;
+  display: block; touch-action: none; cursor: ns-resize;
   overflow: visible;
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.30));
 }
 
-/* Knob body — filled dark circle */
-.k-body {
-  fill: var(--knob);
-}
+.k-body  { fill: var(--knob); }
+.k-notch { fill: var(--notch); }
 
-/* Notch indicator — rotated ONLY via SVG transform attribute in JS.
-   DO NOT add CSS transform here — CSS overrides SVG presentation
-   attributes and would prevent setAttribute('transform',…) from working. */
-.k-notch {
-  fill: var(--notch);
-}
-
-/* Active state while dragging */
 .knob-svg.active .k-body  { fill: #2c2824; }
 .knob-svg.active .k-notch { fill: #f0a030; }
+.knob-svg:hover  .k-body  { fill: #242220; }
 
-/* Hover — very subtle */
-.knob-svg:hover .k-body { fill: #242220; }
+/* ── IO section (cab IR + reverb) ─────────────────────────────── */
+#io {
+  flex-shrink: 0;
+  background: var(--sky-deep);
+  border-top: 2px solid rgba(74, 184, 222, 0.18);
+  padding-bottom: 10px;
+}
+
+.io-row {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 32px;
+}
+
+.io-row + .io-row {
+  border-top: 1px solid rgba(90, 120, 152, 0.18);
+}
+
+.io-label {
+  font-size: 10px; font-weight: 700;
+  color: var(--text); letter-spacing: 0.22em;
+  white-space: nowrap;
+  width: 80px; flex-shrink: 0;
+}
+
+.io-select {
+  flex: 1;
+  height: 32px;
+  background-color: var(--knob);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%234AB8DE' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  background-size: 8px 5px;
+  color: #A8D8F0;
+  border: 1.5px solid rgba(74, 184, 222, 0.40);
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  padding: 0 28px 0 12px;
+  outline: none;
+  cursor: pointer;
+  border-radius: 2px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.io-select:focus { border-color: var(--notch); }
+.io-select:hover { border-color: rgba(74, 184, 222, 0.65); }
+
+.io-select option {
+  background: #1E2530;
+  color: #A0D0E8;
+}
+
+/* ── LED circle toggle — pure circle, no glow, no text ───────── */
+.io-toggle {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--notch);
+  background: var(--notch);
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.io-toggle:hover { opacity: 0.80; }
+
+.io-toggle.off {
+  background: transparent;
+  border-color: rgba(90, 120, 152, 0.38);
+}
+
+.io-toggle.off:hover {
+  border-color: rgba(90, 120, 152, 0.62);
+}
