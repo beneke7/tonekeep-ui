@@ -254,7 +254,7 @@ for (let i = 0; i < posAttr.count; i++) {
 // transparent:true + depthWrite:false = water blends naturally with the frosted
 // glass above it.  Both are alpha-sorted transparent objects so the layering works.
 const waterMat = new THREE.MeshStandardMaterial({
-  color:           0x48C8E8,   // bright aqua — lighter, more translucent-feeling
+  color:           0x3AACC8,   // cool slate-blue water — matches scene palette
   emissive:        new THREE.Color(0x003050).multiplyScalar(0.25),
   roughness:       0.06,       // smoother = more glassy sheen per facet
   metalness:       0.15,
@@ -270,6 +270,38 @@ waterMesh.userData.wasDisplaced = false;
 
 // fillH set in onLoad — converts world amplitude → local amplitude
 let waterFillH = 1.0;
+
+// Stored after onLoad so debug sliders can re-apply water dimensions live
+let _ampBox  = null;  // THREE.Box3
+let _ampSize = null;  // THREE.Vector3
+let _ampCX   = 0;
+let _ampCZ   = 0;
+
+// Reads the four debug range inputs and repositions the water mesh.
+// Called from onLoad and from debug slider events.
+function applyWaterDimensions() {
+  if (!_ampBox) return;
+  const xMult  = parseFloat(document.getElementById('db-x').value);
+  const zMult  = parseFloat(document.getElementById('db-z').value);
+  const flPct  = parseFloat(document.getElementById('db-floor').value);
+  const lvPct  = parseFloat(document.getElementById('db-level').value);
+
+  const floorY = _ampBox.min.y + _ampSize.y * flPct;
+  const waterY = _ampBox.min.y + _ampSize.y * lvPct;
+  const fillH  = Math.max(0.01, waterY - floorY);
+  const fpX    = _ampSize.x * xMult;
+  const fpZ    = _ampSize.z * zMult;
+
+  waterMesh.scale.set(fpX, fillH, fpZ);
+  waterMesh.position.set(_ampCX, floorY + fillH * 0.5, _ampCZ);
+  waterFillH = fillH;
+
+  // Update readouts
+  document.getElementById('dbv-x').textContent     = xMult.toFixed(2);
+  document.getElementById('dbv-z').textContent     = zMult.toFixed(2);
+  document.getElementById('dbv-floor').textContent = flPct.toFixed(2);
+  document.getElementById('dbv-level').textContent = lvPct.toFixed(2);
+}
 
 const displayGroup = new THREE.Group();
 scene.add(displayGroup);
@@ -327,24 +359,13 @@ objLoader.load(
     ampGroup = ampMesh;
     displayGroup.add(ampMesh);
 
-    // Re-measure in world space after all transforms
-    const scaledBox = new THREE.Box3().setFromObject(object);
-    const scaledSize = scaledBox.getSize(new THREE.Vector3());
+    // Store bounds so debug sliders can re-apply transforms at any time
+    _ampBox  = new THREE.Box3().setFromObject(object);
+    _ampSize = _ampBox.getSize(new THREE.Vector3());
+    _ampCX   = (_ampBox.min.x + _ampBox.max.x) * 0.5;
+    _ampCZ   = (_ampBox.min.z + _ampBox.max.z) * 0.5;
 
-    const cx = (scaledBox.min.x + scaledBox.max.x) * 0.5;
-    const cz = (scaledBox.min.z + scaledBox.max.z) * 0.5;
-    const fpX = scaledSize.x * 0.82;
-    const fpZ = scaledSize.z * 0.82;
-
-    // Water sits from 8% (avoids base geometry) to 58% of amp height
-    const floorY = scaledBox.min.y + scaledSize.y * 0.08;
-    const waterY = scaledBox.min.y + scaledSize.y * 0.58;
-    const fillH = waterY - floorY;
-
-    // Scale box so top face = water surface, bottom face = water floor
-    waterMesh.scale.set(fpX, fillH, fpZ);
-    waterMesh.position.set(cx, floorY + fillH * 0.5, cz);
-    waterFillH = fillH;
+    applyWaterDimensions(); // uses current slider values as initial placement
 
     loadStatus.textContent = 'MODEL LOADED';
     loadStatus.textContent = 'READY';
@@ -483,6 +504,12 @@ window.addEventListener('pointermove', e => {
 
 window.addEventListener('pointerup', () => {
   if (_drag) { _drag.svg.classList.remove('active'); _drag = null; }
+});
+
+// Debug sliders — wire all four to applyWaterDimensions
+['db-x','db-z','db-floor','db-level'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', applyWaterDimensions);
 });
 
 // ────────────────────────────────────────────────────────────────
