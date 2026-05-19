@@ -6,11 +6,11 @@
    ================================================================ */
 
 :root {
-  --sky:     #ffffff;
-  --knob:    #2a2420;   /* dark warm brown */
-  --notch:   #d4830a;   /* amber indicator */
-  --text:    #1a1614;   /* near-black labels */
-  --text-dim:#6a5c50;   /* dimmed values */
+  --sky:     #F2EBDF;
+  --knob:    #3d2e1e;   /* warm espresso — readable on parchment, not harsh black */
+  --notch:   #f0a020;   /* bright amber — pops on dark knob */
+  --text:    #2a1e0e;
+  --text-dim:#8a7060;
   --font:    'Hack', 'JetBrains Mono', 'Courier New', monospace;
 }
 
