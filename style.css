@@ -1,0 +1,266 @@
+/* ================================================================
+   PINAM — STYLE.CSS
+   Palette: Warm Sand #f2ece0 / Dark Amber #b05600
+   Rules: No gradients. No box-shadow. No border-radius anywhere.
+          All text uppercase via text-transform, not HTML.
+   ================================================================ */
+
+/* ── Custom properties ────────────────────────────────────────── */
+:root {
+  /* Bright warm scheme — sand background, dark-amber text */
+  --black:       #f2ece0;   /* warm sand (used as bg throughout) */
+  --amber:       #b05600;   /* dark burnt amber — readable on sand */
+  --amber-mid:   #7a3c00;   /* deep brown for secondary labels */
+  --amber-dark:  #d4b870;   /* golden sand for inactive fills & tracks */
+  --red-clip:    #cc2200;
+
+  --font:        'JetBrains Mono', 'Courier New', monospace;
+  --fs-xs:       9px;
+  --fs-sm:       10px;
+  --fs-md:       11px;
+  --fs-hd:       12px;
+
+  --border:      1px solid var(--amber);
+  --border-dim:  1px solid var(--amber-mid);
+  --border-faint:1px solid #c8a850;
+}
+
+/* ── Reset ────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--black);
+  color: var(--amber);
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Root grid ────────────────────────────────────────────────── */
+#app {
+  display: grid;
+  grid-template-columns: 20% 60% 20%;
+  grid-template-rows: 100vh;
+  width: 100%;
+  height: 100vh;
+  border: var(--border);
+}
+
+/* ── Shared panel chrome ──────────────────────────────────────── */
+aside, main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Column dividers */
+#sidebar-left  { border-right: var(--border); }
+#canvas-container { border-right: var(--border); }
+
+/* Panel top labels */
+.panel-header {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  font-size: var(--fs-hd);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  border-bottom: var(--border);
+}
+
+/* ── Left sidebar: telemetry ──────────────────────────────────── */
+#sidebar-left {
+  overflow-y: auto;
+  scrollbar-width: none; /* Firefox */
+}
+#sidebar-left::-webkit-scrollbar { display: none; }
+
+.tele-group {
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+
+.tele-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 3px 0;
+}
+
+.tele-key {
+  font-size: var(--fs-xs);
+  font-weight: 300;
+  color: var(--amber-mid);
+  white-space: nowrap;
+}
+
+.tele-val {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-align: right;
+  min-width: 56px;
+  padding-left: 8px;
+}
+
+.tele-divider {
+  border-top: var(--border-dim);
+  flex-shrink: 0;
+}
+
+/* ── Center canvas ────────────────────────────────────────────── */
+#canvas-container {
+  background: var(--black);
+}
+
+#webgl-canvas {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+#canvas-footer {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-top: var(--border-dim);
+  font-size: var(--fs-xs);
+  color: var(--amber-mid);
+  letter-spacing: 0.14em;
+}
+
+/* ── Right sidebar: parameter sliders ────────────────────────── */
+#sidebar-right {
+  overflow: hidden;
+}
+
+/* Each param block takes equal vertical space */
+.param-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px 8px;
+  min-height: 0;
+}
+
+.param-divider {
+  border-top: var(--border-dim);
+  flex-shrink: 0;
+}
+
+.param-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  margin-bottom: 6px;
+}
+
+.param-label {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.param-val {
+  font-size: var(--fs-sm);
+  font-weight: 300;
+  color: var(--amber-mid);
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: right;
+}
+
+/* ── Vertical slider container ────────────────────────────────── */
+.slider-wrap-v {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* ── Range input: base reset ──────────────────────────────────── */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: ns-resize;
+  outline: none;
+}
+
+/* ── Vertical range slider ────────────────────────────────────── */
+/*
+   writing-mode: vertical-lr  →  track runs top→bottom
+   direction: rtl             →  0 at bottom, 100 at top (fader convention)
+   Works in Chrome 111+, Safari 16.4+, Firefox 108+.
+*/
+input[type="range"].slider-v {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 36px;
+  height: 100%;
+  min-height: 60px;
+}
+
+/* ── Webkit: track ────────────────────────────────────────────── */
+input[type="range"].slider-v::-webkit-slider-runnable-track {
+  background: var(--amber-dark);
+  border: var(--border-faint);
+  width: 4px;
+  border-radius: 0;
+}
+
+/* ── Webkit: thumb (flat fader cap) ──────────────────────────── */
+/*
+   margin-left centers the 32px-wide thumb on the 4px track:
+   offset = -(thumb_width - track_width) / 2 = -(32-4)/2 = -14px
+*/
+input[type="range"].slider-v::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  background: var(--amber);
+  width: 32px;
+  height: 8px;
+  margin-left: -14px;
+  border-radius: 0;
+  border: none;
+  transition: background 80ms linear;
+}
+
+input[type="range"].slider-v:hover::-webkit-slider-thumb,
+input[type="range"].slider-v:focus::-webkit-slider-thumb {
+  background: #ffffff;
+}
+
+input[type="range"].slider-v::-webkit-slider-thumb:active {
+  background: #ffffff;
+}
+
+/* ── Firefox: track ───────────────────────────────────────────── */
+input[type="range"].slider-v::-moz-range-track {
+  background: var(--amber-dark);
+  border: var(--border-faint);
+  width: 4px;
+  border-radius: 0;
+}
+
+/* ── Firefox: thumb ───────────────────────────────────────────── */
+input[type="range"].slider-v::-moz-range-thumb {
+  background: var(--amber);
+  width: 32px;
+  height: 8px;
+  border-radius: 0;
+  border: none;
+}
+
+input[type="range"].slider-v:hover::-moz-range-thumb {
+  background: #ffffff;
+}
