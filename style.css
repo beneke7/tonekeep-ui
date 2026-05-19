@@ -19,7 +19,8 @@
 html, body {
   width: 100%; height: 100%;
   display: flex; align-items: center; justify-content: center;
-  background: var(--sky);
+  /* Slightly cooler/deeper than the plugin — gives it something to sit against */
+  background: #E4D9CB;
   font-family: var(--font);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -31,10 +32,15 @@ html, body {
 #plugin {
   width: 880px; height: 480px;
   display: flex; flex-direction: column;
-  background: var(--sky);
+  /* Warm diagonal blend: lighter warm top-left → richer deeper bottom-right */
+  background: linear-gradient(145deg, #FAF4EC 0%, #F2EBDF 48%, #E9DFD0 100%);
   overflow: hidden;
   flex-shrink: 0;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.08);
+  /* Minimal frame: warm border line + soft drop shadow */
+  border: 1.5px solid #C4B09A;
+  box-shadow:
+    0 10px 48px rgba(100, 72, 40, 0.22),  /* warm drop shadow */
+    inset 0 1px 0 rgba(255,255,255,0.55); /* top-edge highlight */
 }
 
 /* ── 3D Viewport ──────────────────────────────────────────────── */
