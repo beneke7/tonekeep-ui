@@ -404,23 +404,34 @@ function updateFluidDisplacement(timeMs) {
     const x = topOrigXZ[ii * 2];
     const z = topOrigXZ[ii * 2 + 1];
 
-    // Idle: always-on gentle movement at rest
-    const idle = Math.sin(x * 3.5 + t * 0.55) * Math.cos(z * 3.0 + t * 0.48) * 0.030;
+    // Idle: subtle always-on base — alive even at depth=0
+    const idle = Math.sin(x * 3.5 + t * 0.55) * Math.cos(z * 3.0 + t * 0.48) * 0.022;
 
-    // ── Primary swell (dominates) ──────────────────────────────
-    // Two large crossing swells create the main rolling surface
+    // ── Primary swells — dominant, continuous, no envelope ────
     const sw1 = Math.sin(x * CFG.FLUID_FREQ_X + t)
               * Math.cos(z * CFG.FLUID_FREQ_Z + t * 0.72 + CFG.FLUID_PHASE);
-    const sw2 = Math.sin((x * 0.65 + z * 0.9) * 1.9 + t * 0.85) * 0.70;
+    const sw2 = Math.sin((x * 0.65 + z * 0.9) * 1.9 + t * 0.85) * 0.65;
 
-    // ── Secondary chop (occasional, lower amplitude) ──────────
-    const chop = Math.sin(x * 5.5 + z * 4.0 + t * 1.8) * 0.18
-               + Math.cos(x * 4.0 - z * 6.5 + t * 2.1) * 0.14;
+    // ── Decay envelopes — each ripple band has its own lifecycle.
+    // pow(max(0, sin(slowT)), 2.2) spends ~50% of time near zero
+    // then rises to a peak and falls back — wave groups appear, crest, die.
+    // Different slow frequencies mean bands never all peak simultaneously.
+    const e1 = Math.pow(Math.max(0.0, Math.sin(t * 0.62 + 0.00)), 2.2);
+    const e2 = Math.pow(Math.max(0.0, Math.sin(t * 0.79 + 2.09)), 2.2);
+    const e3 = Math.pow(Math.max(0.0, Math.sin(t * 0.51 + 4.19)), 2.2);
+    const e4 = Math.pow(Math.max(0.0, Math.sin(t * 0.94 + 1.05)), 2.2);
 
-    // ── Surface ripple (fine detail on top of swells) ─────────
-    const ripple = (Math.sin(x * 12.0 + t * 3.5) + Math.cos(z * 10.0 - t * 3.0)) * 0.07;
+    // ── Decaying ripple bands ──────────────────────────────────
+    const r1 = Math.sin(x *  9.0 + z *  7.0 + t * 3.3) * e1 * 0.52;
+    const r2 = Math.cos(x *  7.0 - z * 11.0 + t * 2.9) * e2 * 0.45;
+    const r3 = Math.sin(x * 13.0 + z *  5.5 + t * 3.8) * e3 * 0.40;
+    const r4 = Math.cos(x *  6.0 + z * 14.0 + t * 2.5) * e4 * 0.36;
 
-    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (sw1 + sw2 + chop + ripple));
+    // ── Fine micro-ripple — decays with e1 so it pulses with band 1
+    const micro = (Math.sin(x * 19.0 + t * 5.2) + Math.cos(z * 16.0 - t * 4.5))
+                * e2 * 0.10;
+
+    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (sw1 + sw2 + r1 + r2 + r3 + r4 + micro));
   }
 
   posAttr.needsUpdate = true;
@@ -495,6 +506,75 @@ window.addEventListener('pointerup', () => {
   if (_drag) { _drag.svg.classList.remove('active'); _drag = null; }
 });
 
+
+// ════════════════════════════════════════════════════════════════
+// JUCE INTEGRATION
+//
+// Three entry points — use whichever matches your plugin architecture:
+//
+//  1. Direct JS call (WebBrowserComponent::evaluateJavascript)
+//     JUCE code:  webView.evaluateJavascript ("PINAM.setParam('depth', 0.8)");
+//
+//  2. Batch update
+//     JUCE code:  webView.evaluateJavascript ("PINAM.setAll({gain:0.5,depth:0.3})");
+//
+//  3. WebSocket (JUCE runs a WS server, JS connects automatically)
+//     Send JSON: { "type": "param", "key": "depth", "value": 0.8 }
+//             or { "type": "setAll", "params": { "gain": 0.5, ... } }
+//
+// All paths write to STATE[key] and update the knob UI.
+// ════════════════════════════════════════════════════════════════
+
+function _juceSetParam(key, raw) {
+  if (!(key in STATE)) return;
+  const v = Math.max(0, Math.min(1, parseFloat(raw)));
+  STATE[key] = v;
+  const svg   = document.querySelector(`.knob-svg[data-param="${key}"]`);
+  const valEl = valEls[key] ?? null;
+  if (svg) applyKnob(svg, valEl, key, v);
+}
+
+// Global object JUCE calls into
+window.PINAM = {
+  // Set a single parameter — JUCE: PINAM.setParam('gain', 0.75)
+  setParam: _juceSetParam,
+
+  // Set all parameters at once — JUCE: PINAM.setAll({gain:0.5, depth:0.3})
+  setAll(params) {
+    Object.entries(params).forEach(([k, v]) => _juceSetParam(k, v));
+  },
+
+  // Read current value — JUCE: PINAM.getParam('depth')
+  getParam: (key) => STATE[key] ?? 0,
+
+  // Full state snapshot — useful for preset save on the JUCE side
+  snapshot: () => ({
+    inputGain:  STATE.inputGain,
+    volume:     STATE.volume,
+    treble:     STATE.treble,
+    bass:       STATE.bass,
+    reverb:     STATE.reverb,
+    rate:       STATE.rate,
+    depth:      STATE.depth,
+    outputGain: STATE.outputGain,
+  }),
+};
+
+// WebSocket bridge — auto-connects to JUCE's WS server if running.
+// JUCE plugin: start a WebSocketServer on port 9001 in prepareToPlay().
+(function connectBridge(port = 9001) {
+  try {
+    const ws = new WebSocket(`ws://localhost:${port}`);
+    ws.onmessage = ({ data }) => {
+      try {
+        const msg = JSON.parse(data);
+        if (msg.type === 'param')  PINAM.setParam(msg.key, msg.value);
+        if (msg.type === 'setAll') PINAM.setAll(msg.params);
+      } catch (_) {}
+    };
+    ws.onclose = () => setTimeout(() => connectBridge(port), 3000); // auto-reconnect
+  } catch (_) {} // silently skip if WebSocket not available (e.g. file://)
+}());
 
 // ────────────────────────────────────────────────────────────────
 // RESPONSIVE RESIZE
