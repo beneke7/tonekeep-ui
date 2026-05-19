@@ -59,48 +59,6 @@ html, body {
   pointer-events: none;
 }
 
-/* ── Water debug panel ────────────────────────────────────────── */
-#water-debug {
-  position: absolute;
-  bottom: 24px; right: 14px;
-  background: rgba(20,30,42,0.82);
-  border: 1px solid rgba(90,130,160,0.4);
-  padding: 8px 10px;
-  display: flex; flex-direction: column; gap: 5px;
-  pointer-events: all;
-  backdrop-filter: blur(4px);
-  min-width: 200px;
-}
-.db-title {
-  font-family: var(--font);
-  font-size: 8px; font-weight: 700;
-  letter-spacing: 0.22em;
-  color: #5A8AAA;
-  margin-bottom: 2px;
-}
-.db-row {
-  display: flex; align-items: center; gap: 6px;
-}
-.db-lbl {
-  font-family: var(--font);
-  font-size: 8px; font-weight: 600;
-  color: #5A7898; letter-spacing: 0.12em;
-  width: 34px; flex-shrink: 0;
-}
-.db-row input[type="range"] {
-  flex: 1;
-  height: 2px;
-  accent-color: #4AB8DE;
-  cursor: ew-resize;
-}
-.db-val {
-  font-family: var(--font);
-  font-size: 8px; font-weight: 700;
-  color: #A8C8E0;
-  width: 30px; text-align: right;
-  letter-spacing: 0.06em;
-}
-
 /* ── Corner anchor marks ──────────────────────────────────────── */
 /* L-bracket (2 sides of a border-box) + stacked text labels.
    Inspired by camera viewfinders and PCB registration marks. */

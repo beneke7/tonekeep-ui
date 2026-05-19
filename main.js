@@ -43,11 +43,11 @@ const CFG = Object.freeze({
   AUTO_ROTATE_SPEED: 0,
 
   // Fluid geometry — low segment count = chunky low-poly facets
-  FLUID_SEGMENTS: 14,         // 14×14 quads → indie low-poly look
+  FLUID_SEGMENTS: 42,         // higher res = finer ripple detail
   FLUID_WORLD_SIZE: 2.2,
 
   // Fluid displacement
-  FLUID_MAX_AMP: 0.65,
+  FLUID_MAX_AMP: 0.22,        // low peak — chaos lives in the density, not height
   FLUID_FREQ_X: 2.5,
   FLUID_FREQ_Z: 2.0,
   FLUID_TIME_SCALE: 0.0020,
@@ -271,43 +271,30 @@ waterMesh.userData.wasDisplaced = false;
 // fillH set in onLoad — converts world amplitude → local amplitude
 let waterFillH = 1.0;
 
-// Stored after onLoad so debug sliders can re-apply water dimensions live
-let _ampBox  = null;  // THREE.Box3
-let _ampSize = null;  // THREE.Vector3
+// Water placement — tuned values baked in from debug session
+const WATER_X_MULT  = 0.77;
+const WATER_Z_MULT  = 0.88;
+const WATER_FLOOR_PCT = 0.18;
+const WATER_LEVEL_PCT = 0.50;
+
+let _ampBox  = null;
+let _ampSize = null;
 let _ampCX   = 0;
 let _ampCZ   = 0;
 
-// Reads the four debug range inputs and repositions the water mesh.
-// Called from onLoad and from debug slider events.
 function applyWaterDimensions() {
   if (!_ampBox) return;
-  const xMult  = parseFloat(document.getElementById('db-x').value);
-  const zMult  = parseFloat(document.getElementById('db-z').value);
-  const flPct  = parseFloat(document.getElementById('db-floor').value);
-  const lvPct  = parseFloat(document.getElementById('db-level').value);
-
-  const floorY = _ampBox.min.y + _ampSize.y * flPct;
-  const waterY = _ampBox.min.y + _ampSize.y * lvPct;
+  const floorY = _ampBox.min.y + _ampSize.y * WATER_FLOOR_PCT;
+  const waterY = _ampBox.min.y + _ampSize.y * WATER_LEVEL_PCT;
   const fillH  = Math.max(0.01, waterY - floorY);
-  const fpX    = _ampSize.x * xMult;
-  const fpZ    = _ampSize.z * zMult;
-
-  // Shift water down in Y to account for the amp's sloped front panel.
-  // The panel tilts forward at the top, so pushing the water down keeps
-  // the upper-front edge of the box behind the glass face.
-  const yOffset = _ampSize.y * 0.04;
-  waterMesh.scale.set(fpX, fillH, fpZ);
+  const yOffset = _ampSize.y * 0.04; // sloped-front-panel compensation
+  waterMesh.scale.set(_ampSize.x * WATER_X_MULT, fillH, _ampSize.z * WATER_Z_MULT);
   waterMesh.position.set(_ampCX, floorY + fillH * 0.5 - yOffset, _ampCZ);
   waterFillH = fillH;
-
-  // Update readouts
-  document.getElementById('dbv-x').textContent     = xMult.toFixed(2);
-  document.getElementById('dbv-z').textContent     = zMult.toFixed(2);
-  document.getElementById('dbv-floor').textContent = flPct.toFixed(2);
-  document.getElementById('dbv-level').textContent = lvPct.toFixed(2);
 }
 
 const displayGroup = new THREE.Group();
+displayGroup.position.y = 0.28; // lift amp+water up in the viewport
 scene.add(displayGroup);
 displayGroup.add(waterMesh);
 
@@ -417,25 +404,26 @@ function updateFluidDisplacement(timeMs) {
     const x = topOrigXZ[ii * 2];
     const z = topOrigXZ[ii * 2 + 1];
 
-    // Idle — always on, gentle constant surface movement
-    const idle  = Math.sin(x * 4.0 + t * 0.52) * Math.cos(z * 3.5 + t * 0.44) * 0.055;
+    // Idle: fine surface texture always on, even at depth=0
+    const idle = Math.sin(x * 9.0 + t * 2.1) * Math.cos(z * 8.0 + t * 1.8) * 0.025
+               + Math.sin(x * 13.0 + z * 10.0 + t * 2.8) * 0.014;
 
-    // Layer 1: primary swell
-    const swell = Math.sin(x * CFG.FLUID_FREQ_X + t)
-                * Math.cos(z * CFG.FLUID_FREQ_Z + t * 0.72 + CFG.FLUID_PHASE);
+    // Dense crossing ripples — small amplitude, many angles = visual chaos
+    const r1 = Math.sin(x * 11.0 + z *  8.0 + t * 3.6) * 0.26;
+    const r2 = Math.cos(x *  7.5 + z * 13.5 - t * 3.1) * 0.22;
+    const r3 = Math.sin(x * 16.0 - z *  9.5 + t * 4.3) * 0.18;
+    const r4 = Math.cos(x *  5.5 + z * 17.0 + t * 2.9) * 0.16;
 
-    // Layer 2: diagonal chop — boosted for more chaos
-    const chop  = Math.sin((x * 0.9 + z * 1.1) * 3.0 + t * 1.45) * 0.55
-                + Math.cos((x * 1.2 - z * 0.8) * 2.6 + t * 1.10) * 0.45;
+    // Splash spikes — pow(max(0,sin()), 3) creates sharp localized upward peaks
+    // that fire and vanish as the waves cross, simulating water droplets/splashing
+    const sp1 = Math.pow(Math.max(0.0, Math.sin(x * 20.0 + z * 12.0 + t * 6.5)), 3) * 0.50;
+    const sp2 = Math.pow(Math.max(0.0, Math.cos(x * 14.0 - z * 18.0 + t * 5.8)), 3) * 0.42;
+    const sp3 = Math.pow(Math.max(0.0, Math.sin(-x * 16.0 + z * 11.0 + t * 7.2)), 3) * 0.38;
 
-    // Layer 3: fine ripple
-    const fine  = (Math.sin(x * 6.2 + t * 2.4) + Math.cos(z * 5.6 - t * 2.0)) * 0.22;
+    // Micro-chop — very high frequency, adds surface graininess
+    const micro = (Math.sin(x * 25.0 + t * 9.0) + Math.cos(z * 22.0 - t * 8.0)) * 0.09;
 
-    // Layer 4: turbulence — high-frequency noise, makes surface feel unpredictable
-    const turb  = Math.sin(x * 9.5 + z * 8.2 + t * 3.4) * 0.18
-                + Math.cos(x * 7.8 - z * 6.5 + t * 2.8) * 0.14;
-
-    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (swell + chop + fine + turb));
+    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (r1 + r2 + r3 + r4 + sp1 + sp2 + sp3 + micro));
   }
 
   posAttr.needsUpdate = true;
@@ -510,11 +498,6 @@ window.addEventListener('pointerup', () => {
   if (_drag) { _drag.svg.classList.remove('active'); _drag = null; }
 });
 
-// Debug sliders — wire all four to applyWaterDimensions
-['db-x','db-z','db-floor','db-level'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', applyWaterDimensions);
-});
 
 // ────────────────────────────────────────────────────────────────
 // RESPONSIVE RESIZE
