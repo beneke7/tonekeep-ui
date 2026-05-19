@@ -107,29 +107,29 @@ html, body {
 .cnr {
   position: absolute;
   top: 16px;
-  width: 36px; height: 36px;
+  width: 52px; height: 52px;   /* larger bracket footprint */
   pointer-events: none;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 #cnr-tl {
   left: 16px;
-  border-top:  1px solid var(--line);
-  border-left: 1px solid var(--line);
-  padding: 6px 0 0 6px;
+  border-top:  2.5px solid #A8D0EE;   /* thicker, much lighter */
+  border-left: 2.5px solid #A8D0EE;
+  padding: 8px 0 0 8px;
 }
 #cnr-tr {
   right: 16px;
-  border-top:  1px solid var(--line);
-  border-right: 1px solid var(--line);
-  padding: 6px 6px 0 0;
+  border-top:   2.5px solid #A8D0EE;
+  border-right: 2.5px solid #A8D0EE;
+  padding: 8px 8px 0 0;
   align-items: flex-end;
 }
 .cnr-text {
   font-size: 11px;
   font-weight: 700;
-  color: var(--text-dim);
+  color: #C8E4F8;              /* bright light blue */
   letter-spacing: 0.20em;
   white-space: nowrap;
   line-height: 1;
@@ -137,7 +137,7 @@ html, body {
 .cnr-sub {
   font-size: 9px;
   font-weight: 600;
-  color: var(--line);
+  color: #7AAAC8;              /* mid cool blue */
   letter-spacing: 0.14em;
   white-space: nowrap;
   line-height: 1;
