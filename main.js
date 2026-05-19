@@ -43,11 +43,11 @@ const CFG = Object.freeze({
   AUTO_ROTATE_SPEED: 0,
 
   // Fluid geometry — low segment count = chunky low-poly facets
-  FLUID_SEGMENTS: 42,         // higher res = finer ripple detail
+  FLUID_SEGMENTS: 72,         // higher res — fine ripple detail needs density
   FLUID_WORLD_SIZE: 2.2,
 
   // Fluid displacement
-  FLUID_MAX_AMP: 0.22,        // low peak — chaos lives in the density, not height
+  FLUID_MAX_AMP: 0.48,        // big waves dominate
   FLUID_FREQ_X: 2.5,
   FLUID_FREQ_Z: 2.0,
   FLUID_TIME_SCALE: 0.0020,
@@ -404,26 +404,23 @@ function updateFluidDisplacement(timeMs) {
     const x = topOrigXZ[ii * 2];
     const z = topOrigXZ[ii * 2 + 1];
 
-    // Idle: fine surface texture always on, even at depth=0
-    const idle = Math.sin(x * 9.0 + t * 2.1) * Math.cos(z * 8.0 + t * 1.8) * 0.025
-               + Math.sin(x * 13.0 + z * 10.0 + t * 2.8) * 0.014;
+    // Idle: always-on gentle movement at rest
+    const idle = Math.sin(x * 3.5 + t * 0.55) * Math.cos(z * 3.0 + t * 0.48) * 0.030;
 
-    // Dense crossing ripples — small amplitude, many angles = visual chaos
-    const r1 = Math.sin(x * 11.0 + z *  8.0 + t * 3.6) * 0.26;
-    const r2 = Math.cos(x *  7.5 + z * 13.5 - t * 3.1) * 0.22;
-    const r3 = Math.sin(x * 16.0 - z *  9.5 + t * 4.3) * 0.18;
-    const r4 = Math.cos(x *  5.5 + z * 17.0 + t * 2.9) * 0.16;
+    // ── Primary swell (dominates) ──────────────────────────────
+    // Two large crossing swells create the main rolling surface
+    const sw1 = Math.sin(x * CFG.FLUID_FREQ_X + t)
+              * Math.cos(z * CFG.FLUID_FREQ_Z + t * 0.72 + CFG.FLUID_PHASE);
+    const sw2 = Math.sin((x * 0.65 + z * 0.9) * 1.9 + t * 0.85) * 0.70;
 
-    // Splash spikes — pow(max(0,sin()), 3) creates sharp localized upward peaks
-    // that fire and vanish as the waves cross, simulating water droplets/splashing
-    const sp1 = Math.pow(Math.max(0.0, Math.sin(x * 20.0 + z * 12.0 + t * 6.5)), 3) * 0.50;
-    const sp2 = Math.pow(Math.max(0.0, Math.cos(x * 14.0 - z * 18.0 + t * 5.8)), 3) * 0.42;
-    const sp3 = Math.pow(Math.max(0.0, Math.sin(-x * 16.0 + z * 11.0 + t * 7.2)), 3) * 0.38;
+    // ── Secondary chop (occasional, lower amplitude) ──────────
+    const chop = Math.sin(x * 5.5 + z * 4.0 + t * 1.8) * 0.18
+               + Math.cos(x * 4.0 - z * 6.5 + t * 2.1) * 0.14;
 
-    // Micro-chop — very high frequency, adds surface graininess
-    const micro = (Math.sin(x * 25.0 + t * 9.0) + Math.cos(z * 22.0 - t * 8.0)) * 0.09;
+    // ── Surface ripple (fine detail on top of swells) ─────────
+    const ripple = (Math.sin(x * 12.0 + t * 3.5) + Math.cos(z * 10.0 - t * 3.0)) * 0.07;
 
-    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (r1 + r2 + r3 + r4 + sp1 + sp2 + sp3 + micro));
+    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (sw1 + sw2 + chop + ripple));
   }
 
   posAttr.needsUpdate = true;
