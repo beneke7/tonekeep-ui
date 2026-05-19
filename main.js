@@ -116,7 +116,7 @@ renderer.localClippingEnabled = true;
 // SCENE + CAMERA
 // ────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xE4EAF0); // matches --sky
+scene.background = new THREE.Color(0x1A2A3A); // dark navy — glass pops
 
 const camera = new THREE.PerspectiveCamera(CFG.CAM_FOV, 1, CFG.CAM_NEAR, CFG.CAM_FAR);
 camera.position.set(...CFG.CAM_POS);
