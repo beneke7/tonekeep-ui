@@ -9,9 +9,9 @@
   --sky:      #E4EAF0;   /* cool blue-grey slate */
   --knob:     #1E2530;   /* dark charcoal, cool-toned */
   --notch:    #F0A020;   /* amber — warm-cool contrast */
-  --text:     #1E2530;
-  --text-dim: #687890;   /* steel mid-grey */
-  --line:     #8899AB;   /* corner bracket colour */
+  --text:     #182038;   /* deep cool navy */
+  --text-dim: #3A5878;   /* saturated slate blue */
+  --line:     #5A7898;   /* brighter steel for brackets */
   --font:     'Hack', 'JetBrains Mono', 'Courier New', monospace;
 }
 
@@ -94,7 +94,7 @@ html, body {
 }
 .cnr-sub {
   font-size: 7px;
-  font-weight: 400;
+  font-weight: 600;
   color: var(--line);
   letter-spacing: 0.14em;
   white-space: nowrap;
@@ -123,7 +123,7 @@ html, body {
 
 .k-lbl {
   font-size: 8px;
-  font-weight: 400;
+  font-weight: 600;
   color: var(--text-dim);
   letter-spacing: 0.18em;
   white-space: nowrap;
