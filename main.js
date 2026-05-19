@@ -47,7 +47,7 @@ const CFG = Object.freeze({
   FLUID_WORLD_SIZE: 2.2,
 
   // Fluid displacement
-  FLUID_MAX_AMP: 0.50,       // more drama at full thump
+  FLUID_MAX_AMP: 0.65,
   FLUID_FREQ_X: 2.5,
   FLUID_FREQ_Z: 2.0,
   FLUID_TIME_SCALE: 0.0020,
@@ -116,7 +116,7 @@ renderer.localClippingEnabled = true;
 // SCENE + CAMERA
 // ────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1A2A3A); // dark navy — glass pops
+scene.background = new THREE.Color(0x3A5268); // mid-dark slate — contrast without harshness
 
 const camera = new THREE.PerspectiveCamera(CFG.CAM_FOV, 1, CFG.CAM_NEAR, CFG.CAM_FAR);
 camera.position.set(...CFG.CAM_POS);
@@ -196,21 +196,21 @@ scene.add(topSpot);
 // roughness on the base layer creates imperfection.  transmission < 1.0 makes
 // it feel solid rather than invisible.
 const glassMaterial = new THREE.MeshPhysicalMaterial({
-  color: 0xe8f4ff,
-  transmission: 0.88,
-  opacity: 1.0,
-  roughness: 0.08,
-  metalness: 0.0,
-  ior: 1.18,
-  thickness: 0.4,
-  clearcoat: 1.0,
-  clearcoatRoughness: 0.05,
-  transparent: true,
-  envMapIntensity: 0.45,
-  attenuationColor: new THREE.Color(0xc8e8ff),
+  color:               0xe8f4ff,
+  transmission:        0.88,
+  opacity:             1.0,
+  roughness:           0.08,
+  metalness:           0.0,
+  ior:                 1.18,
+  thickness:           0.4,
+  clearcoat:           1.0,
+  clearcoatRoughness:  0.05,
+  transparent:         true,
+  envMapIntensity:     0.45,
+  attenuationColor:    new THREE.Color(0xc8e8ff),
   attenuationDistance: 4.0,
-  side: THREE.FrontSide,
-  depthWrite: false,
+  side:                THREE.FrontSide,
+  depthWrite:          false,
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -251,15 +251,19 @@ for (let i = 0; i < posAttr.count; i++) {
   }
 }
 
+// transparent:true + depthWrite:false = water blends naturally with the frosted
+// glass above it.  Both are alpha-sorted transparent objects so the layering works.
 const waterMat = new THREE.MeshStandardMaterial({
-  color:           0x0e9ed4,
-  emissive:        new THREE.Color(0x003344).multiplyScalar(0.5),
-  roughness:       0.18,
-  metalness:       0.28,
-  envMapIntensity: 0.85,
+  color:           0x48C8E8,   // bright aqua — lighter, more translucent-feeling
+  emissive:        new THREE.Color(0x003050).multiplyScalar(0.25),
+  roughness:       0.06,       // smoother = more glassy sheen per facet
+  metalness:       0.15,
+  envMapIntensity: 0.7,
   flatShading:     true,
   side:            THREE.DoubleSide,
-  transparent:     false,
+  transparent:     true,
+  opacity:         0.72,
+  depthWrite:      false,
 });
 const waterMesh = new THREE.Mesh(waterGeo, waterMat);
 waterMesh.userData.wasDisplaced = false;
@@ -388,21 +392,25 @@ function updateFluidDisplacement(timeMs) {
     const x = topOrigXZ[ii * 2];
     const z = topOrigXZ[ii * 2 + 1];
 
-    // Idle ripple — always on; 0.045 local ≈ 3% of fill height, clearly visible
-    const idle  = Math.sin(x * 4.0 + t * 0.52) * Math.cos(z * 3.5 + t * 0.44) * 0.045;
+    // Idle — always on, gentle constant surface movement
+    const idle  = Math.sin(x * 4.0 + t * 0.52) * Math.cos(z * 3.5 + t * 0.44) * 0.055;
 
-    // Layer 1: primary swell (slow, long wavelength)
+    // Layer 1: primary swell
     const swell = Math.sin(x * CFG.FLUID_FREQ_X + t)
                 * Math.cos(z * CFG.FLUID_FREQ_Z + t * 0.72 + CFG.FLUID_PHASE);
 
-    // Layer 2: diagonal chop (criss-cross interference texture)
-    const chop  = Math.sin((x * 0.9 + z * 1.1) * 3.0 + t * 1.45) * 0.40
-                + Math.cos((x * 1.2 - z * 0.8) * 2.6 + t * 1.10) * 0.30;
+    // Layer 2: diagonal chop — boosted for more chaos
+    const chop  = Math.sin((x * 0.9 + z * 1.1) * 3.0 + t * 1.45) * 0.55
+                + Math.cos((x * 1.2 - z * 0.8) * 2.6 + t * 1.10) * 0.45;
 
-    // Layer 3: fine surface ripple (fast, small — adds detail at high thump)
-    const fine  = (Math.sin(x * 6.2 + t * 2.4) + Math.cos(z * 5.6 - t * 2.0)) * 0.14;
+    // Layer 3: fine ripple
+    const fine  = (Math.sin(x * 6.2 + t * 2.4) + Math.cos(z * 5.6 - t * 2.0)) * 0.22;
 
-    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (swell + chop + fine));
+    // Layer 4: turbulence — high-frequency noise, makes surface feel unpredictable
+    const turb  = Math.sin(x * 9.5 + z * 8.2 + t * 3.4) * 0.18
+                + Math.cos(x * 7.8 - z * 6.5 + t * 2.8) * 0.14;
+
+    posAttr.setY(topVtxIdx[ii], 0.5 + idle + localAmp * (swell + chop + fine + turb));
   }
 
   posAttr.needsUpdate = true;
