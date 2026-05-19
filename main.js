@@ -292,11 +292,12 @@ function applyWaterDimensions() {
   const fpX    = _ampSize.x * xMult;
   const fpZ    = _ampSize.z * zMult;
 
-  // Shift water slightly backward in Z to account for the amp's sloped front panel.
-  // The front face angles inward at the bottom, so pulling back avoids bleed-through.
-  const zOffset = _ampSize.z * 0.04;
+  // Shift water down in Y to account for the amp's sloped front panel.
+  // The panel tilts forward at the top, so pushing the water down keeps
+  // the upper-front edge of the box behind the glass face.
+  const yOffset = _ampSize.y * 0.04;
   waterMesh.scale.set(fpX, fillH, fpZ);
-  waterMesh.position.set(_ampCX, floorY + fillH * 0.5, _ampCZ - zOffset);
+  waterMesh.position.set(_ampCX, floorY + fillH * 0.5 - yOffset, _ampCZ);
   waterFillH = fillH;
 
   // Update readouts

@@ -106,38 +106,36 @@ html, body {
    Inspired by camera viewfinders and PCB registration marks. */
 .cnr {
   position: absolute;
-  top: 16px;
-  width: 52px; height: 52px;   /* larger bracket footprint */
+  top: 14px;
+  width: 64px; height: 64px;
   pointer-events: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 #cnr-tl {
-  left: 16px;
-  border-top:  2.5px solid #A8D0EE;   /* thicker, much lighter */
-  border-left: 2.5px solid #A8D0EE;
-  padding: 8px 0 0 8px;
+  left: 14px;
+  border-top:  3px solid #E4EAF1;
+  border-left: 3px solid #E4EAF1;
+  padding: 9px 0 0 9px;
 }
 #cnr-tr {
-  right: 16px;
-  border-top:   2.5px solid #A8D0EE;
-  border-right: 2.5px solid #A8D0EE;
-  padding: 8px 8px 0 0;
-  align-items: flex-end;
+  right: 14px;
+  border-top:   3px solid #E4EAF1;
+  border-right: 3px solid #E4EAF1;
 }
 .cnr-text {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  color: #C8E4F8;              /* bright light blue */
-  letter-spacing: 0.20em;
+  color: #E4EAF1;
+  letter-spacing: 0.18em;
   white-space: nowrap;
   line-height: 1;
 }
 .cnr-sub {
   font-size: 9px;
   font-weight: 600;
-  color: #7AAAC8;              /* mid cool blue */
+  color: #8AAEC8;
   letter-spacing: 0.14em;
   white-space: nowrap;
   line-height: 1;
