@@ -6,12 +6,13 @@
    ================================================================ */
 
 :root {
-  --sky:     #F2EBDF;
-  --knob:    #3d2e1e;   /* warm espresso — readable on parchment, not harsh black */
-  --notch:   #f0a020;   /* bright amber — pops on dark knob */
-  --text:    #2a1e0e;
-  --text-dim:#8a7060;
-  --font:    'Hack', 'JetBrains Mono', 'Courier New', monospace;
+  --sky:      #E4EAF0;   /* cool blue-grey slate */
+  --knob:     #1E2530;   /* dark charcoal, cool-toned */
+  --notch:    #F0A020;   /* amber — warm-cool contrast */
+  --text:     #1E2530;
+  --text-dim: #687890;   /* steel mid-grey */
+  --line:     #8899AB;   /* corner bracket colour */
+  --font:     'Hack', 'JetBrains Mono', 'Courier New', monospace;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -19,8 +20,7 @@
 html, body {
   width: 100%; height: 100%;
   display: flex; align-items: center; justify-content: center;
-  /* Slightly cooler/deeper than the plugin — gives it something to sit against */
-  background: #E4D9CB;
+  background: #C8D4DE; /* deeper cool slate — plugin lifts off it */
   font-family: var(--font);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -32,15 +32,13 @@ html, body {
 #plugin {
   width: 880px; height: 480px;
   display: flex; flex-direction: column;
-  /* Warm diagonal blend: lighter warm top-left → richer deeper bottom-right */
-  background: linear-gradient(145deg, #FAF4EC 0%, #F2EBDF 48%, #E9DFD0 100%);
+  background: linear-gradient(145deg, #EDF2F7 0%, #E4EAF0 48%, #DAE2E8 100%);
   overflow: hidden;
   flex-shrink: 0;
-  /* Minimal frame: warm border line + soft drop shadow */
-  border: 1.5px solid #C4B09A;
+  border: 1.5px solid #A0B0C0;
   box-shadow:
-    0 10px 48px rgba(100, 72, 40, 0.22),  /* warm drop shadow */
-    inset 0 1px 0 rgba(255,255,255,0.55); /* top-edge highlight */
+    0 10px 48px rgba(40, 60, 90, 0.24),
+    inset 0 1px 0 rgba(255,255,255,0.60);
 }
 
 /* ── 3D Viewport ──────────────────────────────────────────────── */
@@ -56,9 +54,51 @@ html, body {
 
 #load-status {
   position: absolute; bottom: 6px; left: 10px;
-  font-size: 8px; color: rgba(0,0,0,0.25);
+  font-size: 8px; color: rgba(30,40,60,0.30);
   letter-spacing: 0.1em;
   pointer-events: none;
+}
+
+/* ── Corner anchor marks ──────────────────────────────────────── */
+/* L-bracket (2 sides of a border-box) + stacked text labels.
+   Inspired by camera viewfinders and PCB registration marks. */
+.cnr {
+  position: absolute;
+  top: 16px;
+  width: 36px; height: 36px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+#cnr-tl {
+  left: 16px;
+  border-top:  1px solid var(--line);
+  border-left: 1px solid var(--line);
+  padding: 6px 0 0 6px;
+}
+#cnr-tr {
+  right: 16px;
+  border-top:  1px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 6px 6px 0 0;
+  align-items: flex-end;
+}
+.cnr-text {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.20em;
+  white-space: nowrap;
+  line-height: 1;
+}
+.cnr-sub {
+  font-size: 7px;
+  font-weight: 400;
+  color: var(--line);
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 /* ── Controls strip ───────────────────────────────────────────── */
