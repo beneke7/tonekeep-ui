@@ -97,7 +97,6 @@ html, body {
   justify-content: space-evenly;
   padding: 0 32px;
   background: var(--sky);
-  border-top: 1px solid rgba(90, 120, 152, 0.18);
 }
 
 .k {
@@ -135,8 +134,7 @@ html, body {
 /* ── IO section (cab IR + reverb) ─────────────────────────────── */
 #io {
   flex-shrink: 0;
-  background: var(--sky-deep);
-  border-top: 2px solid rgba(74, 184, 222, 0.18);
+  background: var(--sky);
   padding-bottom: 10px;
 }
 
@@ -148,33 +146,29 @@ html, body {
   padding: 0 32px;
 }
 
-.io-row + .io-row {
-  border-top: 1px solid rgba(90, 120, 152, 0.18);
-}
-
 .io-label {
-  font-size: 10px; font-weight: 700;
-  color: var(--text); letter-spacing: 0.22em;
+  font-size: 13px; font-weight: 700;
+  color: var(--text); letter-spacing: 0.18em;
   white-space: nowrap;
-  width: 80px; flex-shrink: 0;
+  width: 90px; flex-shrink: 0;
 }
 
 .io-select {
   flex: 1;
   height: 32px;
   background-color: var(--knob);
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%234AB8DE' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%238A9EAF' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 11px center;
-  background-size: 8px 5px;
-  color: #A8D8F0;
-  border: 1.5px solid rgba(74, 184, 222, 0.40);
+  background-position: right 9px center;
+  background-size: 7px 4px;
+  color: #A8C8DC;
+  border: 1px solid rgba(90, 120, 152, 0.45);
   font-family: var(--font);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.10em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 0 28px 0 12px;
+  padding: 0 22px 0 10px;
   outline: none;
   cursor: pointer;
   border-radius: 2px;
@@ -182,34 +176,34 @@ html, body {
   appearance: none;
 }
 
-.io-select:focus { border-color: var(--notch); }
-.io-select:hover { border-color: rgba(74, 184, 222, 0.65); }
+.io-select:focus { border-color: rgba(90, 120, 152, 0.75); }
+.io-select:hover { border-color: rgba(90, 120, 152, 0.70); }
 
 .io-select option {
   background: #1E2530;
   color: #A0D0E8;
 }
 
-/* ── LED circle toggle — pure circle, no glow, no text ───────── */
+/* ── LED circle toggle — muted grey, no glow, no text ────────── */
 .io-toggle {
   flex-shrink: 0;
-  width: 20px; height: 20px;
+  width: 24px; height: 24px;
   border-radius: 50%;
-  border: 2px solid var(--notch);
-  background: var(--notch);
+  border: 2px solid #8A9EAF;
+  background: #8A9EAF;
   cursor: pointer;
   padding: 0;
   outline: none;
   transition: background 0.15s, border-color 0.15s, opacity 0.15s;
 }
 
-.io-toggle:hover { opacity: 0.80; }
+.io-toggle:hover { opacity: 0.72; }
 
 .io-toggle.off {
   background: transparent;
-  border-color: rgba(90, 120, 152, 0.38);
+  border-color: rgba(90, 120, 152, 0.32);
 }
 
 .io-toggle.off:hover {
-  border-color: rgba(90, 120, 152, 0.62);
+  border-color: rgba(90, 120, 152, 0.55);
 }

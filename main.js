@@ -21,8 +21,9 @@ import { mergeGeometries }   from 'three/addons/utils/BufferGeometryUtils.js';
 const CFG = Object.freeze({
   OBJ_PATH: './amp2.obj',
 
-  CAM_FOV: 50, CAM_NEAR: 0.1, CAM_FAR: 100,
-  CAM_POS: [0, 4.5, 5.5], CAM_TARGET: [0, 0.5, 0],
+  CAM_FOV: 48, CAM_NEAR: 0.1, CAM_FAR: 100,
+  // 3/4 front-right view, eye-level — shows amp face + water surface
+  CAM_POS: [1.8, 1.6, 3.8], CAM_TARGET: [0, 0.4, 0],
 
   AUTO_ROTATE_SPEED: 0,
 
@@ -72,6 +73,58 @@ const valEls = {
   outputGain: document.getElementById('val-outputGain'),
 };
 
+// ── JUCE BRIDGE ──────────────────────────────────────────────────
+const JUCE_BRIDGE = {
+  ready: false,
+  pageReadySent: false,
+  queue: [],
+  listeners: [],
+};
+
+function getJuceBackend() {
+  return window.__JUCE__?.backend ?? null;
+}
+
+function emitToJuce(eventId, payload = {}) {
+  const backend = getJuceBackend();
+  if (!backend) {
+    JUCE_BRIDGE.queue.push({ eventId, payload });
+    return;
+  }
+  backend.emitEvent(eventId, payload);
+}
+
+function addJuceListener(eventId, callback) {
+  JUCE_BRIDGE.listeners.push({ eventId, callback, registered: false });
+}
+
+function flushJuceBridge() {
+  const backend = getJuceBackend();
+  if (!backend) {
+    window.setTimeout(flushJuceBridge, 25);
+    return;
+  }
+
+  for (const entry of JUCE_BRIDGE.listeners) {
+    if (!entry.registered) {
+      backend.addEventListener(entry.eventId, entry.callback);
+      entry.registered = true;
+    }
+  }
+
+  JUCE_BRIDGE.ready = true;
+
+  while (JUCE_BRIDGE.queue.length > 0) {
+    const { eventId, payload } = JUCE_BRIDGE.queue.shift();
+    backend.emitEvent(eventId, payload);
+  }
+
+  if (!JUCE_BRIDGE.pageReadySent) {
+    JUCE_BRIDGE.pageReadySent = true;
+    backend.emitEvent('pageReady', {});
+  }
+}
+
 // ── RENDERER ─────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -93,8 +146,8 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping  = true;
 controls.dampingFactor  = 0.06;
 controls.enablePan      = false;
-controls.minDistance    = 2.5;
-controls.maxDistance    = 14;
+controls.minDistance    = 1.5;
+controls.maxDistance    = 9;
 controls.target.set(...CFG.CAM_TARGET);
 
 let isOrbitActive = false;
@@ -342,7 +395,7 @@ function applyKnob(svg, valEl, param, v) {
   svg.querySelector('.k-notch').setAttribute('transform', `rotate(${deg.toFixed(1)} 30 30)`);
   if (valEl) valEl.textContent = Math.round(c * 100).toString().padStart(3, '0');
   // JUCE bridge: notify backend
-  window.__JUCE__?.backend?.emitEvent('paramChanged', { key: param, value: c });
+  emitToJuce('paramChanged', { key: param, value: c });
 }
 
 document.querySelectorAll('.knob-svg').forEach(svg => {
@@ -403,15 +456,15 @@ function setToggleState(btn, enabled) {
 }
 
 // ── IO: JUCE EVENT LISTENERS ──────────────────────────────────────
-window.__JUCE__?.backend?.addEventListener('setParam', (data) => {
+addJuceListener('setParam', (data) => {
   if (data?.key) _juceSetParam(data.key, data.value);
 });
 
-window.__JUCE__?.backend?.addEventListener('audioLevel', (data) => {
+addJuceListener('audioLevel', (data) => {
   STATE.audioLevel = (data?.value ?? 0);
 });
 
-window.__JUCE__?.backend?.addEventListener('initData', (data) => {
+addJuceListener('initData', (data) => {
   if (!data) return;
 
   // Populate cab IR select
@@ -444,20 +497,20 @@ window.__JUCE__?.backend?.addEventListener('initData', (data) => {
 
 // ── IO: UI → JUCE ────────────────────────────────────────────────
 cabSelect.addEventListener('change', (e) => {
-  window.__JUCE__?.backend?.emitEvent('selectCab', { index: parseInt(e.target.value, 10) });
+  emitToJuce('selectCab', { index: parseInt(e.target.value, 10) });
 });
 revSelect.addEventListener('change', (e) => {
-  window.__JUCE__?.backend?.emitEvent('selectReverb', { index: parseInt(e.target.value, 10) });
+  emitToJuce('selectReverb', { index: parseInt(e.target.value, 10) });
 });
 cabToggle.addEventListener('click', () => {
   const enabled = cabToggle.dataset.on !== 'true';
   setToggleState(cabToggle, enabled);
-  window.__JUCE__?.backend?.emitEvent('cabBypass', { enabled });
+  emitToJuce('cabBypass', { enabled });
 });
 revToggle.addEventListener('click', () => {
   const enabled = revToggle.dataset.on !== 'true';
   setToggleState(revToggle, enabled);
-  window.__JUCE__?.backend?.emitEvent('reverbBypass', { enabled });
+  emitToJuce('reverbBypass', { enabled });
 });
 
 // ── RESPONSIVE RESIZE ────────────────────────────────────────────
@@ -490,4 +543,4 @@ requestAnimationFrame(animate);
 
 // ── SIGNAL JUCE: PAGE READY ───────────────────────────────────────
 // Emitted after all listeners are wired so C++ can safely send initData + params
-window.__JUCE__?.backend?.emitEvent('pageReady', {});
+flushJuceBridge();
