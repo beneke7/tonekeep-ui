@@ -39,14 +39,14 @@ const CFG = Object.freeze({
 // ── STATE ────────────────────────────────────────────────────────
 const STATE = {
   // APVTS mirrors — normalised [0,1]
-  inputGain:  0.50,
+  inputGain:  0.7692,   // 0 dB on -40→+12 range
   volume:     0.60,
   treble:     0.50,
   bass:       0.50,
   reverb:     0.30,
   rate:       0.20,
   depth:      0.00,
-  outputGain: 0.70,
+  outputGain: 0.625,    // 0 dB on -40→+24 range
 
   // Audio level pushed from C++ at 30 Hz
   audioLevel: 0.0,
@@ -93,7 +93,7 @@ function formatKnobValue(param, normalized) {
     if (db <= -39.9) return '-inf';
     return (db >= 0 ? '+' : '') + db.toFixed(1) + ' dB';
   }
-  return (normalized * 9 + 1).toFixed(1);
+  return (normalized * 10).toFixed(1);
 }
 
 function updateGainBars() {
