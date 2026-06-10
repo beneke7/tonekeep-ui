@@ -255,10 +255,11 @@ for (let i = 0; i < posAttr.count; i++) {
 const waterMat = new THREE.MeshStandardMaterial({
   color: 0x3AACC8, emissive: new THREE.Color(0x003050).multiplyScalar(0.25),
   roughness: 0.06, metalness: 0.15, envMapIntensity: 0.7,
-  flatShading: true, side: THREE.DoubleSide,
-  transparent: true, opacity: 0.72, depthWrite: false,
+  flatShading: true, side: THREE.FrontSide,
+  transparent: true, opacity: 0.82, depthWrite: true,
 });
 const waterMesh = new THREE.Mesh(waterGeo, waterMat);
+waterMesh.renderOrder = 0;
 
 let waterFillH = 1.0;
 
@@ -320,6 +321,7 @@ new OBJLoader().load(CFG.OBJ_PATH,
     }
 
     ampGroup = ampMesh;
+    ampMesh.renderOrder = 1;
     displayGroup.add(ampMesh);
 
     _ampBox  = new THREE.Box3().setFromObject(object);
