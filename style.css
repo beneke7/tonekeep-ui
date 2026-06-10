@@ -5,15 +5,38 @@
    Fixed 920 × 560 px window
    ================================================================ */
 
+@font-face {
+  font-family: 'Library3am';
+  src: url('Library3am.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Unitblock';
+  src: url('Unitblock.ttf') format('truetype');
+  font-weight: normal;
+  font-style:normal;
+}
+
+@font-face {
+  font-family: 'Superpastry';
+  src: url('SuperPastry.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 :root {
-  --sky:      #E4EAF0;
-  --sky-deep: #D8E1E8;   /* slightly darker for IO section */
-  --knob:     #1E2530;
-  --notch:    #4AB8DE;
-  --text:     #182038;
-  --text-dim: #3A5878;
-  --line:     #5A7898;
-  --font:     'Hack', 'JetBrains Mono', 'Courier New', monospace;
+  --sky:        #E4EAF0;
+  --sky-deep:   #D8E1E8;
+  --knob:       #1E2530;
+  --notch:      #4AB8DE;
+  --text:       #182038;
+  --text-dim:   #3A5878;
+  --line:       #5A7898;
+  --font:       'Hack', 'JetBrains Mono', 'Courier New', monospace;
+  --font-title: 'Library3am', 'Hack', monospace;
+  --font-labels:'Unitblock', 'Hack', monospace;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -23,7 +46,7 @@ html, body {
   margin: 0; padding: 0;
   overflow: hidden;
   background: var(--sky);
-  font-family: var(--font);
+  font-family: var(--font-labels);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   -webkit-font-smoothing: antialiased;
@@ -78,11 +101,13 @@ html, body {
   border-right: 6px solid #E4EAF1;
 }
 .cnr-text {
+  font-family: var(--font-title);
   font-size: 26px; font-weight: 700;
   color: #E4EAF1; letter-spacing: 0.18em;
   white-space: nowrap; line-height: 1;
 }
 .cnr-sub {
+  font-family: var(--font-title);
   font-size: 20px; font-weight: 700;
   color: #8AAEC8; letter-spacing: 0.14em;
   white-space: nowrap; line-height: 1;
@@ -119,6 +144,7 @@ html, body {
 }
 
 .gain-bar-lbl {
+  font-family: var(--font-labels);
   font-size: 11px;
   font-weight: 700;
   color: var(--text-dim);
@@ -164,12 +190,14 @@ html, body {
 }
 
 .k-lbl {
+  font-family: var(--font-labels);
   font-size: 11px; font-weight: 600;
   color: var(--text-dim); letter-spacing: 0.18em;
   white-space: nowrap;
 }
 
 .k-val {
+  font-family: var(--font-labels);
   font-size: 10px; font-weight: 700;
   color: var(--text); font-variant-numeric: tabular-nums;
   letter-spacing: 0.05em;
@@ -206,6 +234,7 @@ html, body {
 }
 
 .io-label {
+  font-family: var(--font-labels);
   font-size: 13px; font-weight: 700;
   color: var(--text); letter-spacing: 0.18em;
   white-space: nowrap;
@@ -222,7 +251,7 @@ html, body {
   background-size: 7px 4px;
   color: #A8C8DC;
   border: 1px solid rgba(90, 120, 152, 0.45);
-  font-family: var(--font);
+  font-family: var(--font-labels);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
