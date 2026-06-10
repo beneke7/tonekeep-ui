@@ -94,9 +94,67 @@ html, body {
   height: 108px;
   display: flex;
   align-items: center;
-  justify-content: space-evenly;
-  padding: 0 32px;
+  padding: 0 16px;
+  gap: 10px;
   background: var(--sky);
+}
+
+/* Knobs live in a flex strip between the two gain bars */
+#knobs-strip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+}
+
+/* ── Gain bars (flanking input/output indicators) ─────────────── */
+.gain-bar {
+  flex-shrink: 0;
+  width: 20px;
+  height: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.gain-bar-lbl {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.14em;
+}
+
+.gain-bar-track {
+  flex: 1;
+  width: 8px;
+  background: rgba(30,37,48,0.20);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+
+.gain-bar-fill {
+  width: 100%;
+  border-radius: 0 0 4px 4px;
+  background: linear-gradient(to top,
+    var(--notch)  0%,
+    #28D8A0      55%,
+    #F0A030     100%
+  );
+  transition: height 0.06s ease;
+  height: 50%;
+}
+
+/* Hairline marking 0 dB — position set per-bar via inline style */
+.gain-bar-zero {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: rgba(255,255,255,0.30);
+  pointer-events: none;
 }
 
 .k {
@@ -112,9 +170,10 @@ html, body {
 }
 
 .k-val {
-  font-size: 11px; font-weight: 700;
+  font-size: 10px; font-weight: 700;
   color: var(--text); font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .knob-svg {

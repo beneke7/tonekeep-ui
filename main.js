@@ -73,6 +73,34 @@ const valEls = {
   outputGain: document.getElementById('val-outputGain'),
 };
 
+const inBarFill  = document.getElementById('in-bar-fill');
+const outBarFill = document.getElementById('out-bar-fill');
+
+// ── KNOB VALUE FORMATTING ────────────────────────────────────────
+// Gain knobs: dB labels matching APVTS ranges in PluginProcessor.cpp
+//   inputGain:  -40 → +12 dB  (range 52)
+//   outputGain: -40 → +24 dB  (range 64)
+// All other knobs: 1.0 – 10.0 float
+const GAIN_DB = {
+  inputGain:  { min: -40, range: 52 },
+  outputGain: { min: -40, range: 64 },
+};
+
+function formatKnobValue(param, normalized) {
+  const g = GAIN_DB[param];
+  if (g) {
+    const db = g.min + normalized * g.range;
+    if (db <= -39.9) return '-inf';
+    return (db >= 0 ? '+' : '') + db.toFixed(1) + ' dB';
+  }
+  return (normalized * 9 + 1).toFixed(1);
+}
+
+function updateGainBars() {
+  if (inBarFill)  inBarFill.style.height  = (STATE.inputGain  * 100).toFixed(1) + '%';
+  if (outBarFill) outBarFill.style.height = (STATE.outputGain * 100).toFixed(1) + '%';
+}
+
 // ── JUCE BRIDGE ──────────────────────────────────────────────────
 const JUCE_BRIDGE = {
   ready: false,
@@ -411,12 +439,12 @@ function updateFluidDisplacement(timeMs, deltaMs) {
 let _drag = null;
 
 function applyKnob(svg, valEl, param, v) {
-  const c   = Math.max(0, Math.min(1, v));
+  const c = Math.max(0, Math.min(1, v));
   STATE[param] = c;
   const deg = -135 + c * 270;
   svg.querySelector('.k-notch').setAttribute('transform', `rotate(${deg.toFixed(1)} 30 30)`);
-  if (valEl) valEl.textContent = Math.round(c * 100).toString().padStart(3, '0');
-  // JUCE bridge: notify backend
+  if (valEl) valEl.textContent = formatKnobValue(param, c);
+  updateGainBars();
   emitToJuce('paramChanged', { key: param, value: c });
 }
 
