@@ -370,27 +370,27 @@ function updateFluidDisplacement(timeMs, deltaMs) {
   const raw = Math.min(1.0, STATE.audioLevel);
 
   const faCoeff = raw > _audioFast
-    ? 1 - Math.exp(-dt / 0.025)   // 25 ms attack  — snap to transient
+    ? 1 - Math.exp(-dt / 0.015)   // 15 ms attack  — snap to transient
     : 1 - Math.exp(-dt / 0.10);   // 100 ms release — hold briefly
   _audioFast += (raw - _audioFast) * faCoeff;
 
   const saCoeff = _audioFast > _audioSwell
-    ? 1 - Math.exp(-dt / 0.15)    // 150 ms attack  — builds gradually
+    ? 1 - Math.exp(-dt / 0.10)    // 100 ms attack  — builds quickly
     : 1 - Math.exp(-dt / 3.0);    // 3.0 s  release — lingers long
   _audioSwell += (_audioFast - _audioSwell) * saCoeff;
 
   // ── Amplitudes ───────────────────────────────────────────────────
   const wf = Math.max(waterFillH, 0.01);
 
-  // Knob depth + slow swell energy → large rolling waves
-  const swellAmp  = (STATE.depth * 0.55 + _audioSwell * 0.45)
+  // Knob depth + slow swell energy → large rolling waves (audio drives 70%)
+  const swellAmp  = (STATE.depth * 0.35 + _audioSwell * 0.70)
                     * CFG.FLUID_MAX_AMP / wf;
 
-  // Fast envelope → outward ring ripples (subtle)
-  const rippleAmp = _audioFast * 0.20 * CFG.FLUID_MAX_AMP / wf;
+  // Fast envelope → outward ring ripples (more aggressive on transients)
+  const rippleAmp = _audioFast * 0.50 * CFG.FLUID_MAX_AMP / wf;
 
-  // Water light pulses gently with the slow swell, not the raw level
-  waterLight.intensity = 5.0 + _audioSwell * 5.5;
+  // Water light pulses strongly with playing intensity
+  waterLight.intensity = 5.0 + _audioSwell * 10.0;
 
   // ── Per-vertex displacement ──────────────────────────────────────
   for (let ii = 0; ii < topVtxIdx.length; ii++) {
