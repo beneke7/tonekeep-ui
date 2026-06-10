@@ -440,14 +440,21 @@ function updateFluidDisplacement(timeMs, deltaMs) {
 // ── KNOB INTERACTION ─────────────────────────────────────────────
 let _drag = null;
 
-function applyKnob(svg, valEl, param, v) {
+// Update knob visuals + STATE only — no JUCE emission.
+// Used during init and for JUCE→JS updates so we never echo back to APVTS.
+function setKnobDisplay(svg, valEl, param, v) {
   const c = Math.max(0, Math.min(1, v));
   STATE[param] = c;
   const deg = -135 + c * 270;
   svg.querySelector('.k-notch').setAttribute('transform', `rotate(${deg.toFixed(1)} 30 30)`);
   if (valEl) valEl.textContent = formatKnobValue(param, c);
   updateGainBars();
-  emitToJuce('paramChanged', { key: param, value: c });
+}
+
+// Update visuals + emit to JUCE — only called on real user interaction.
+function applyKnob(svg, valEl, param, v) {
+  setKnobDisplay(svg, valEl, param, v);
+  emitToJuce('paramChanged', { key: param, value: STATE[param] });
 }
 
 document.querySelectorAll('.knob-svg').forEach(svg => {
@@ -455,7 +462,7 @@ document.querySelectorAll('.knob-svg').forEach(svg => {
   const valEl = valEls[param] ?? null;
   let   val   = parseFloat(svg.dataset.default ?? '0');
 
-  applyKnob(svg, valEl, param, val);
+  setKnobDisplay(svg, valEl, param, val); // display only — JUCE will send real values via setParam
 
   listen(svg, 'pointerdown', e => {
     _drag = { svg, valEl, param, value: STATE[param], startY: e.clientY };
@@ -488,10 +495,10 @@ listen(window, 'pointerup', () => {
 function _juceSetParam(key, raw) {
   if (!(key in STATE)) return;
   const v   = Math.max(0, Math.min(1, parseFloat(raw)));
-  STATE[key] = v;
   const svg   = document.querySelector(`.knob-svg[data-param="${key}"]`);
   const valEl = valEls[key] ?? null;
-  if (svg) applyKnob(svg, valEl, key, v);
+  if (svg) setKnobDisplay(svg, valEl, key, v);
+  else { STATE[key] = v; updateGainBars(); }
 }
 
 window.PINAM = {
