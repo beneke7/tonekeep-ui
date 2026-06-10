@@ -77,17 +77,30 @@ const valEls = {
 const JUCE_BRIDGE = {
   ready: false,
   pageReadySent: false,
+  disposed: false,
+  retryTimer: 0,
   queue: [],
   listeners: [],
 };
+
+const CLEANUP = [];
+
+function listen(target, type, handler, options) {
+  target.addEventListener(type, handler, options);
+  CLEANUP.push(() => target.removeEventListener(type, handler, options));
+}
 
 function getJuceBackend() {
   return window.__JUCE__?.backend ?? null;
 }
 
 function emitToJuce(eventId, payload = {}) {
+  if (JUCE_BRIDGE.disposed) return;
+
   const backend = getJuceBackend();
   if (!backend) {
+    if (JUCE_BRIDGE.queue.length >= 64)
+      JUCE_BRIDGE.queue.shift();
     JUCE_BRIDGE.queue.push({ eventId, payload });
     return;
   }
@@ -99,9 +112,11 @@ function addJuceListener(eventId, callback) {
 }
 
 function flushJuceBridge() {
+  if (JUCE_BRIDGE.disposed) return;
+
   const backend = getJuceBackend();
   if (!backend) {
-    window.setTimeout(flushJuceBridge, 25);
+    JUCE_BRIDGE.retryTimer = window.setTimeout(flushJuceBridge, 25);
     return;
   }
 
@@ -151,8 +166,15 @@ controls.maxDistance    = 9;
 controls.target.set(...CFG.CAM_TARGET);
 
 let isOrbitActive = false;
-controls.addEventListener('start', () => { isOrbitActive = true;  });
-controls.addEventListener('end',   () => { isOrbitActive = false; });
+const onOrbitStart = () => { isOrbitActive = true; };
+const onOrbitEnd   = () => { isOrbitActive = false; };
+controls.addEventListener('start', onOrbitStart);
+controls.addEventListener('end', onOrbitEnd);
+CLEANUP.push(() => {
+  controls.removeEventListener('start', onOrbitStart);
+  controls.removeEventListener('end', onOrbitEnd);
+  controls.dispose();
+});
 
 // ── ENVIRONMENT ──────────────────────────────────────────────────
 const pmrem   = new THREE.PMREMGenerator(renderer);
@@ -405,30 +427,30 @@ document.querySelectorAll('.knob-svg').forEach(svg => {
 
   applyKnob(svg, valEl, param, val);
 
-  svg.addEventListener('pointerdown', e => {
+  listen(svg, 'pointerdown', e => {
     _drag = { svg, valEl, param, value: STATE[param], startY: e.clientY };
     svg.classList.add('active');
     e.preventDefault();
   });
-  svg.addEventListener('dblclick', () => {
+  listen(svg, 'dblclick', () => {
     val = parseFloat(svg.dataset.default ?? '0');
     applyKnob(svg, valEl, param, val);
   });
-  svg.addEventListener('wheel', e => {
+  listen(svg, 'wheel', e => {
     e.preventDefault();
     val = Math.max(0, Math.min(1, STATE[param] - e.deltaY / 1800));
     applyKnob(svg, valEl, param, val);
   }, { passive: false });
 });
 
-window.addEventListener('pointermove', e => {
+listen(window, 'pointermove', e => {
   if (!_drag) return;
   const { svg, valEl, param, startY } = _drag;
   _drag.value = Math.max(0, Math.min(1, _drag.value + (startY - e.clientY) / 180));
   _drag.startY = e.clientY;
   applyKnob(svg, valEl, param, _drag.value);
 });
-window.addEventListener('pointerup', () => {
+listen(window, 'pointerup', () => {
   if (_drag) { _drag.svg.classList.remove('active'); _drag = null; }
 });
 
@@ -496,25 +518,25 @@ addJuceListener('initData', (data) => {
 });
 
 // ── IO: UI → JUCE ────────────────────────────────────────────────
-cabSelect.addEventListener('change', (e) => {
+listen(cabSelect, 'change', (e) => {
   emitToJuce('selectCab', { index: parseInt(e.target.value, 10) });
 });
-revSelect.addEventListener('change', (e) => {
+listen(revSelect, 'change', (e) => {
   emitToJuce('selectReverb', { index: parseInt(e.target.value, 10) });
 });
-cabToggle.addEventListener('click', () => {
+listen(cabToggle, 'click', () => {
   const enabled = cabToggle.dataset.on !== 'true';
   setToggleState(cabToggle, enabled);
   emitToJuce('cabBypass', { enabled });
 });
-revToggle.addEventListener('click', () => {
+listen(revToggle, 'click', () => {
   const enabled = revToggle.dataset.on !== 'true';
   setToggleState(revToggle, enabled);
   emitToJuce('reverbBypass', { enabled });
 });
 
 // ── RESPONSIVE RESIZE ────────────────────────────────────────────
-new ResizeObserver((entries) => {
+const resizeObserver = new ResizeObserver((entries) => {
   for (const e of entries) {
     const w = Math.floor(e.contentRect.width);
     const h = Math.floor(e.contentRect.height);
@@ -524,11 +546,17 @@ new ResizeObserver((entries) => {
       camera.updateProjectionMatrix();
     }
   }
-}).observe(canvas);
+});
+resizeObserver.observe(canvas);
+CLEANUP.push(() => resizeObserver.disconnect());
 
 // ── RENDER LOOP ───────────────────────────────────────────────────
+let rafId = 0;
+let disposed = false;
+
 function animate(nowMs) {
-  requestAnimationFrame(animate);
+  if (disposed) return;
+  rafId = requestAnimationFrame(animate);
   const delta = nowMs - (STATE.lastTime || nowMs);
   STATE.lastTime = nowMs;
   STATE.frameCount++;
@@ -539,7 +567,55 @@ function animate(nowMs) {
   controls.update();
   renderer.render(scene, camera);
 }
-requestAnimationFrame(animate);
+rafId = requestAnimationFrame(animate);
+
+function disposeMaterial(material) {
+  if (!material) return;
+  const materials = Array.isArray(material) ? material : [material];
+  for (const mat of materials) {
+    for (const value of Object.values(mat)) {
+      if (value && typeof value.dispose === 'function')
+        value.dispose();
+    }
+    mat.dispose();
+  }
+}
+
+function disposeSceneResources(root) {
+  root.traverse((object) => {
+    if (object.geometry)
+      object.geometry.dispose();
+    if (object.material)
+      disposeMaterial(object.material);
+  });
+}
+
+function shutdown() {
+  if (disposed) return;
+  disposed = true;
+  JUCE_BRIDGE.disposed = true;
+  JUCE_BRIDGE.queue.length = 0;
+  JUCE_BRIDGE.listeners.length = 0;
+
+  if (JUCE_BRIDGE.retryTimer)
+    window.clearTimeout(JUCE_BRIDGE.retryTimer);
+  if (rafId)
+    cancelAnimationFrame(rafId);
+
+  while (CLEANUP.length > 0) {
+    const cleanup = CLEANUP.pop();
+    try { cleanup(); } catch {}
+  }
+
+  if (scene.environment?.dispose)
+    scene.environment.dispose();
+  disposeSceneResources(scene);
+  renderer.dispose();
+  renderer.forceContextLoss?.();
+}
+
+listen(window, 'pagehide', shutdown);
+listen(window, 'beforeunload', shutdown);
 
 // ── SIGNAL JUCE: PAGE READY ───────────────────────────────────────
 // Emitted after all listeners are wired so C++ can safely send initData + params
