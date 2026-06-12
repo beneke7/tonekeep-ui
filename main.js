@@ -11,11 +11,11 @@
 //             → Options.withEventListener("eventId", fn)
 // ================================================================
 
-import * as THREE from 'three';
-import { OBJLoader }         from 'three/addons/loaders/OBJLoader.js';
-import { OrbitControls }     from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment }   from 'three/addons/environments/RoomEnvironment.js';
-import { mergeGeometries }   from 'three/addons/utils/BufferGeometryUtils.js';
+import * as THREE from './vendor/three.module.js';
+import { OBJLoader }         from './vendor/loaders/OBJLoader.js';
+import { OrbitControls }     from './vendor/controls/OrbitControls.js';
+import { RoomEnvironment }   from './vendor/environments/RoomEnvironment.js';
+import { mergeGeometries }   from './vendor/utils/BufferGeometryUtils.js';
 
 // ── CONFIG ──────────────────────────────────────────────────────
 const CFG = Object.freeze({
