@@ -106,6 +106,16 @@ html, body {
   color: #A8C7DC; letter-spacing: 0.08em;
   white-space: nowrap; line-height: 1;
 }
+.cnr-about {
+  font-family: var(--font);
+  font-size: 11px; font-weight: 500;
+  color: #5f7488; letter-spacing: 0.04em;
+  line-height: 1; margin-top: 3px;
+  cursor: pointer; pointer-events: auto;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+.cnr-about:hover { color: #A8C7DC; }
 
 /* ── Knobs strip ──────────────────────────────────────────────── */
 #controls {

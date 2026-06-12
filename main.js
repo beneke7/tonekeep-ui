@@ -74,6 +74,7 @@ const cabSelect  = document.getElementById('cab-select');
 const revSelect  = document.getElementById('rev-select');
 const cabToggle  = document.getElementById('cab-toggle');
 const revToggle  = document.getElementById('rev-toggle');
+const aboutLink  = document.getElementById('cnr-about');
 
 const valEls = {
   inputGain:  document.getElementById('val-inputGain'),
@@ -624,6 +625,7 @@ listen(revToggle, 'click', () => {
   setToggleState(revToggle, enabled);
   emitToJuce('reverbBypass', { enabled });
 });
+if (aboutLink) listen(aboutLink, 'click', () => emitToJuce('showAbout', {}));
 
 // ── RESPONSIVE RESIZE ────────────────────────────────────────────
 const resizeObserver = new ResizeObserver((entries) => {
