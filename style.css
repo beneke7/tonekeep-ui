@@ -1,30 +1,9 @@
 /* ================================================================
    TONEKEEP — plugin UI
    Aesthetic: Teenage Engineering / Valhalla DSP minimalism
-   Font: Hack (closest CDN proxy for Hack Nerd Font)
+   Font: clean system UI stack
    Fixed 920 × 560 px window
    ================================================================ */
-
-@font-face {
-  font-family: 'Library3am';
-  src: url('Library3am.otf') format('opentype');
-  font-weight: normal;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Unitblock';
-  src: url('Unitblock.ttf') format('truetype');
-  font-weight: normal;
-  font-style:normal;
-}
-
-@font-face {
-  font-family: 'Superpastry';
-  src: url('SuperPastry.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-}
 
 :root {
   --sky:        #E4EAF0;
@@ -34,12 +13,21 @@
   --text:       #182038;
   --text-dim:   #3A5878;
   --line:       #5A7898;
-  --font:       'Hack', 'JetBrains Mono', 'Courier New', monospace;
-  --font-title: 'Library3am', 'Hack', monospace;
-  --font-labels:'Unitblock', 'Hack', monospace;
+  --panel-line: rgba(90, 120, 152, 0.42);
+  --panel-glow: rgba(74, 184, 222, 0.10);
+  --font:       "Avenir Next", "Segoe UI", Inter, Arial, sans-serif;
+  --font-labels: var(--font);
+  --font-title: var(--font-labels);
 }
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
 
 html, body {
   width: 100%; height: 100%;
@@ -48,9 +36,11 @@ html, body {
   background: var(--sky);
   font-family: var(--font-labels);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* ── Plugin shell — fills the entire WebBrowserComponent ─────── */
@@ -75,7 +65,7 @@ html, body {
 #load-status {
   position: absolute; bottom: 6px; left: 10px;
   font-size: 8px; color: rgba(30,40,60,0.30);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   pointer-events: none;
 }
 
@@ -83,7 +73,7 @@ html, body {
 .cnr {
   position: absolute;
   top: 14px;
-  width: 78px; height: 78px;
+  width: 190px; height: 78px;
   pointer-events: none;
   display: flex;
   flex-direction: column;
@@ -91,25 +81,29 @@ html, body {
 }
 #cnr-tl {
   left: 14px;
+  width: 250px;
   border-top:  6px solid #E4EAF1;
   border-left: 6px solid #E4EAF1;
-  padding: 11px 0 0 11px;
+  padding: 21px 0 0 20px;
 }
 #cnr-tr {
   right: 14px;
+  width: 300px;
   border-top:   6px solid #E4EAF1;
   border-right: 6px solid #E4EAF1;
+  align-items: flex-end;
+  padding: 21px 20px 0 0;
 }
 .cnr-text {
   font-family: var(--font-title);
-  font-size: 26px; font-weight: 700;
-  color: #E4EAF1; letter-spacing: 0.18em;
+  font-size: 30px; font-weight: 800;
+  color: #E4EAF1; letter-spacing: 0.12em;
   white-space: nowrap; line-height: 1;
 }
 .cnr-sub {
   font-family: var(--font-title);
-  font-size: 20px; font-weight: 700;
-  color: #8AAEC8; letter-spacing: 0.14em;
+  font-size: 22px; font-weight: 800;
+  color: #A8C7DC; letter-spacing: 0.08em;
   white-space: nowrap; line-height: 1;
 }
 
@@ -122,6 +116,7 @@ html, body {
   padding: 0 16px;
   gap: 4px;
   background: var(--sky);
+  border-top: 1px solid rgba(90, 120, 152, 0.22);
 }
 
 /* Knobs live in a flex strip between the two gain bars */
@@ -130,32 +125,47 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-evenly;
+  min-width: 0;
 }
 
 /* ── Gain bars (flanking input/output indicators) ─────────────── */
 .gain-bar {
   flex-shrink: 0;
-  width: 40px;
-  height: 88px;
+  width: 46px;
+  height: 92px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
 }
 
 .gain-bar-lbl {
   font-family: var(--font-labels);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   color: var(--text-dim);
-  letter-spacing: 0.14em;
+  letter-spacing: 0.10em;
+}
+
+.gain-clip {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(30,37,48,0.15);
+  transition: background 0.06s linear, box-shadow 0.06s linear;
+}
+
+.gain-clip.hot {
+  background: #D24A3A;
+  box-shadow: 0 0 5px rgba(210,74,58,0.72);
 }
 
 .gain-bar-track {
   flex: 1;
-  width: 16px;
-  background: rgba(30,37,48,0.20);
-  border-radius: 4px;
+  width: 18px;
+  background: rgba(30,37,48,0.16);
+  border: 1px solid var(--panel-line);
+  border-radius: 3px;
   position: relative;
   overflow: hidden;
   display: flex;
@@ -163,15 +173,23 @@ html, body {
 }
 
 .gain-bar-fill {
+  --meter-level: 0;
+  --meter-clip: 100%;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
-  border-radius: 0 0 4px 4px;
+  height: 100%;
+  border-radius: 2px;
   background: linear-gradient(to top,
-    var(--notch)  0%,
-    #28D8A0      55%,
-    #F0A030     100%
+    #4AB8DE 0%,
+    #28D8A0 58%,
+    #F0A030 82%,
+    #D24A3A 100%
   );
-  transition: height 0.06s ease;
-  height: 50%;
+  clip-path: inset(var(--meter-clip) 0 0 0);
+  transition: clip-path 0.05s linear;
 }
 
 /* Hairline marking 0 dB — position set per-bar via inline style */
@@ -186,29 +204,30 @@ html, body {
 .k {
   display: flex; flex-direction: column;
   align-items: center; gap: 3px;
+  width: 88px;
   cursor: ns-resize;
 }
 
 .k-lbl {
   font-family: var(--font-labels);
-  font-size: 11px; font-weight: 600;
-  color: var(--text-dim); letter-spacing: 0.18em;
+  font-size: 12px; font-weight: 800;
+  color: var(--text-dim); letter-spacing: 0.10em;
   white-space: nowrap;
 }
 
 .k-val {
   font-family: var(--font-labels);
-  font-size: 10px; font-weight: 700;
+  font-size: 12px; font-weight: 750;
   color: var(--text); font-variant-numeric: tabular-nums;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
 .knob-svg {
-  width: 56px; height: 56px;
+  width: 55px; height: 55px;
   display: block; touch-action: none; cursor: ns-resize;
   overflow: visible;
-  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.30));
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.28));
 }
 
 .k-body  { fill: var(--knob); }
@@ -222,44 +241,48 @@ html, body {
 #io {
   flex-shrink: 0;
   background: var(--sky);
-  padding-bottom: 10px;
+  /* left<right slides the IR rows ~14px left of the knobs without resizing them.
+     lower the left value / raise the right value in step to shift further left. */
+  padding: 4px 32px 12px 4px;
 }
 
 .io-row {
-  height: 50px;
+  height: 48px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 0 32px;
+  gap: 14px;
+  padding: 0;
 }
 
 .io-label {
   font-family: var(--font-labels);
-  font-size: 13px; font-weight: 700;
-  color: var(--text); letter-spacing: 0.18em;
+  font-size: 15px; font-weight: 800;
+  color: var(--text); letter-spacing: 0.08em;
   white-space: nowrap;
-  width: 90px; flex-shrink: 0;
+  width: 88px; flex-shrink: 0;
+  text-align: right;   /* sit snug against the dropdown, aligned across both rows */
 }
 
 .io-select {
-  flex: 1;
-  height: 32px;
+  flex: 1;             /* grow to fill the row — dropdowns span full width */
+  min-width: 0;
+  height: 34px;
   background-color: var(--knob);
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%238A9EAF' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 9px center;
   background-size: 7px 4px;
   color: #A8C8DC;
-  border: 1px solid rgba(90, 120, 152, 0.45);
+  border: 2px solid var(--panel-line);
   font-family: var(--font-labels);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  padding: 0 22px 0 10px;
+  padding: 0 24px 0 12px;
   outline: none;
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: 4px;
   -webkit-appearance: none;
   appearance: none;
 }
@@ -275,13 +298,16 @@ html, body {
 /* ── LED circle toggle — muted grey, no glow, no text ────────── */
 .io-toggle {
   flex-shrink: 0;
-  width: 24px; height: 24px;
+  width: 26px; height: 26px;
   border-radius: 50%;
-  border: 2px solid #8A9EAF;
+  border: 2px solid var(--panel-line);
   background: #8A9EAF;
   cursor: pointer;
   padding: 0;
   outline: none;
+  /* nudge only the toggle 6px right so its middle lines up vertically with the
+     OUT gain bar's middle (layout untouched — dropdowns stay put) */
+  transform: translateX(6px);
   transition: background 0.15s, border-color 0.15s, opacity 0.15s;
 }
 

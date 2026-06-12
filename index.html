@@ -23,9 +23,10 @@
 
     <div class="cnr" id="cnr-tl">
       <span class="cnr-text">ToneKeep</span>
+    </div>
+    <div class="cnr" id="cnr-tr">
       <span class="cnr-sub">Blackface Deluxe</span>
     </div>
-    <div class="cnr" id="cnr-tr"></div>
 
     <span id="load-status"></span>
   </div>
@@ -36,6 +37,7 @@
     <!-- Input gain bar — 0 dB tick at 76.9% (range -40→+12 dB) -->
     <div class="gain-bar" id="in-gain-bar">
       <span class="gain-bar-lbl">IN</span>
+      <span class="gain-clip" id="in-clip"></span>
       <div class="gain-bar-track">
         <div class="gain-bar-fill" id="in-bar-fill"></div>
         <div class="gain-bar-zero" style="bottom:76.9%"></div>
@@ -112,6 +114,7 @@
     <!-- Output gain bar — 0 dB tick at 62.5% (range -40→+24 dB) -->
     <div class="gain-bar" id="out-gain-bar">
       <span class="gain-bar-lbl">OUT</span>
+      <span class="gain-clip" id="out-clip"></span>
       <div class="gain-bar-track">
         <div class="gain-bar-fill" id="out-bar-fill"></div>
         <div class="gain-bar-zero" style="bottom:62.5%"></div>
@@ -130,7 +133,7 @@
       <button class="io-toggle" id="cab-toggle" data-on="true"></button>
     </div>
     <div class="io-row">
-      <span class="io-label">SPRING REV</span>
+      <span class="io-label">REV</span>
       <select class="io-select" id="rev-select">
         <option value="0">NONE</option>
       </select>

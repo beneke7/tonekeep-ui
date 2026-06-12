@@ -23,13 +23,16 @@ const CFG = Object.freeze({
 
   CAM_FOV: 48, CAM_NEAR: 0.1, CAM_FAR: 100,
   // 3/4 front-right view, eye-level — shows amp face + water surface
-  CAM_POS: [1.8, 1.6, 3.8], CAM_TARGET: [0, 0.4, 0],
+  CAM_POS: [1.922, 0.634, 3.534], CAM_TARGET: [0, 0.4, 0],
 
   AUTO_ROTATE_SPEED: 0,
 
   FLUID_SEGMENTS:   72,
   FLUID_WORLD_SIZE: 2.2,
-  FLUID_MAX_AMP:    0.48,
+  FLUID_MAX_AMP:    0.26,
+  // Soft-clip ceiling for the summed audio displacement, as a multiple of
+  // FLUID_MAX_AMP. Lower = tighter clamp on accumulated peaks.
+  FLUID_CLIP:       0.70,
   FLUID_FREQ_X:     2.5,
   FLUID_FREQ_Z:     2.0,
   FLUID_TIME_SCALE: 0.0020,
@@ -48,8 +51,18 @@ const STATE = {
   depth:      0.00,
   outputGain: 0.625,    // 0 dB on -40→+24 range
 
-  // Audio level pushed from C++ at 30 Hz
-  audioLevel: 0.0,
+  // Audio levels pushed from C++ at 30 Hz, linear RMS.
+  inputLevel:  0.0,
+  outputLevel: 0.0,
+  inputPeak:   0.0,
+  outputPeak:  0.0,
+  audioLevel:  0.0,
+
+  // Per-band input RMS (linear), pushed from C++. Drive the water surface:
+  //   low  → big rolling swells   mid → mid ripples   high → fast surface chop
+  bandLow:  0.0,
+  bandMid:  0.0,
+  bandHigh: 0.0,
 
   frameCount: 0, lastTime: 0, fps: 0,
 };
@@ -75,6 +88,11 @@ const valEls = {
 
 const inBarFill  = document.getElementById('in-bar-fill');
 const outBarFill = document.getElementById('out-bar-fill');
+const inClip     = document.getElementById('in-clip');
+const outClip    = document.getElementById('out-clip');
+
+document.addEventListener('selectstart', e => e.preventDefault());
+document.addEventListener('dragstart', e => e.preventDefault());
 
 // ── KNOB VALUE FORMATTING ────────────────────────────────────────
 // Gain knobs: dB labels matching APVTS ranges in PluginProcessor.cpp
@@ -96,9 +114,25 @@ function formatKnobValue(param, normalized) {
   return (normalized * 10).toFixed(1);
 }
 
+function levelToMeterPercent(level) {
+  const safe = Math.max(0.000001, Math.abs(level));
+  const db = 20 * Math.log10(safe);
+  return Math.max(0, Math.min(1, (db + 60) / 60)) * 100;
+}
+
 function updateGainBars() {
-  if (inBarFill)  inBarFill.style.height  = (STATE.inputGain  * 100).toFixed(1) + '%';
-  if (outBarFill) outBarFill.style.height = (STATE.outputGain * 100).toFixed(1) + '%';
+  if (inBarFill) {
+    const pct = levelToMeterPercent(STATE.inputLevel);
+    inBarFill.style.setProperty('--meter-level', (pct / 100).toFixed(3));
+    inBarFill.style.setProperty('--meter-clip', (100 - pct).toFixed(1) + '%');
+  }
+  if (outBarFill) {
+    const pct = levelToMeterPercent(STATE.outputLevel);
+    outBarFill.style.setProperty('--meter-level', (pct / 100).toFixed(3));
+    outBarFill.style.setProperty('--meter-clip', (100 - pct).toFixed(1) + '%');
+  }
+  if (inClip)  inClip.classList.toggle('hot', STATE.inputPeak >= 0.98);
+  if (outClip) outClip.classList.toggle('hot', STATE.outputPeak >= 0.98);
 }
 
 // ── JUCE BRIDGE ──────────────────────────────────────────────────
@@ -181,6 +215,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x3A5268);
 
 const camera = new THREE.PerspectiveCamera(CFG.CAM_FOV, 1, CFG.CAM_NEAR, CFG.CAM_FAR);
+window._cam = camera;
 camera.position.set(...CFG.CAM_POS);
 camera.lookAt(...CFG.CAM_TARGET);
 
@@ -240,7 +275,9 @@ const glassMaterial = new THREE.MeshPhysicalMaterial({
 });
 
 // ── WATER ────────────────────────────────────────────────────────
-const waterGeo  = new THREE.BoxGeometry(1, 1, 1, 22, 1, 22);
+// Higher tessellation on the top face → fine high-frequency ripples resolve
+// cleanly without aliasing (48×48 ≈ 2.4k verts, trivial to displace per frame).
+const waterGeo  = new THREE.BoxGeometry(1, 1, 1, 48, 1, 48);
 const posAttr   = waterGeo.attributes.position;
 
 const topVtxIdx  = [];
@@ -283,6 +320,8 @@ function applyWaterDimensions() {
 
 const displayGroup = new THREE.Group();
 displayGroup.position.y = 0.28;
+displayGroup.rotation.order = 'YXZ';
+displayGroup.rotation.set(0, 5.2, 0);
 scene.add(displayGroup);
 displayGroup.add(waterMesh);
 
@@ -349,48 +388,55 @@ new OBJLoader().load(CFG.OBJ_PATH,
 
 // ── FLUID DISPLACEMENT ───────────────────────────────────────────
 //
-// Two-layer audio response:
-//   _audioFast  — 25ms attack / 100ms release  → instant ripple response
-//   _audioSwell — 150ms attack / 3.0s release  → slow rolling energy
+// Frequency-reactive water. C++ pushes 3-band input RMS (low/mid/high)
+// at 30 Hz; each band drives a different layer of the surface, mapped so
+// the visual spatial/temporal frequency tracks the audio band:
 //
-// The swell takes 3 seconds to fully decay so the water keeps
-// moving beautifully after notes stop — "resonance" feel.
+//   LOW  (<250Hz)   → large, slow rolling swells (low spatial frequency)
+//   MID  (250-2k)   → outward radial rings + medium chop (faster)
+//   HIGH (>2kHz)    → tight, fast surface sparkle (high spatial frequency)
 //
-// Ripples are outward-propagating radial rings (stone-in-water),
-// strongest at center, Gaussian-attenuated toward edges.
+// Each band has its own attack/release follower so picking dynamics read
+// instantly (fast high-band attack) while bass notes leave a lingering
+// swell. At rest only a faint idle micro-motion remains — calm until played.
 
-let _audioFast  = 0;
-let _audioSwell = 0;
+let _envLow = 0, _envMid = 0, _envHigh = 0, _swell = 0;
+
+// Frame-rate-independent one-pole follower with separate attack/release (ms).
+function follow(cur, target, dt, atkMs, relMs) {
+  const tau = (target > cur ? atkMs : relMs) * 0.001;
+  return cur + (target - cur) * (1 - Math.exp(-dt / tau));
+}
 
 function updateFluidDisplacement(timeMs, deltaMs) {
   const t  = timeMs * CFG.FLUID_TIME_SCALE;
   const dt = Math.min(deltaMs * 0.001, 0.05); // seconds, capped
 
-  // ── Attack/release smoothing (frame-rate independent) ────────────
-  const raw = Math.min(1.0, STATE.audioLevel);
+  // ── Per-band envelopes ────────────────────────────────────────────
+  // Soft-compress linear RMS so quiet playing still reads, loud doesn't blow up.
+  const lowT  = 1 - Math.exp(-STATE.bandLow  *  7.0);
+  const midT  = 1 - Math.exp(-STATE.bandMid  * 11.0);
+  const highT = 1 - Math.exp(-STATE.bandHigh * 16.0);
 
-  const faCoeff = raw > _audioFast
-    ? 1 - Math.exp(-dt / 0.015)   // 15 ms attack  — snap to transient
-    : 1 - Math.exp(-dt / 0.10);   // 100 ms release — hold briefly
-  _audioFast += (raw - _audioFast) * faCoeff;
+  _envLow  = follow(_envLow,  lowT,  dt, 35, 600);   // bass: medium attack, long tail
+  _envMid  = follow(_envMid,  midT,  dt, 18, 220);
+  _envHigh = follow(_envHigh, highT, dt,  8,  90);   // pick attack: near-instant
+  _swell   = follow(_swell,   _envLow, dt, 120, 2500); // lingering low-end resonance
 
-  const saCoeff = _audioFast > _audioSwell
-    ? 1 - Math.exp(-dt / 0.10)    // 100 ms attack  — builds quickly
-    : 1 - Math.exp(-dt / 3.0);    // 3.0 s  release — lingers long
-  _audioSwell += (_audioFast - _audioSwell) * saCoeff;
+  // ── Amplitudes (normalised into local geometry space) ─────────────
+  const wf   = Math.max(waterFillH, 0.01);
+  const norm = CFG.FLUID_MAX_AMP / wf;
 
-  // ── Amplitudes ───────────────────────────────────────────────────
-  const wf = Math.max(waterFillH, 0.01);
+  const swellAmp = (STATE.depth * 0.30 + _envLow * 0.55 + _swell * 0.45) * norm;
+  const midAmp   =  _envMid  * 0.55 * norm;
+  const highAmp  =  _envHigh * 0.42 * norm;
 
-  // Knob depth + slow swell energy → large rolling waves (audio drives 70%)
-  const swellAmp  = (STATE.depth * 0.35 + _audioSwell * 0.70)
-                    * CFG.FLUID_MAX_AMP / wf;
+  // Water light pulses with low-end body and brightens/cyans on transient highs.
+  waterLight.intensity = 5.0 + _swell * 8.0 + _envHigh * 6.0;
+  waterLight.color.setRGB(0.0, 0.60 + 0.40 * _envHigh, 1.0);
 
-  // Fast envelope → outward ring ripples (more aggressive on transients)
-  const rippleAmp = _audioFast * 0.50 * CFG.FLUID_MAX_AMP / wf;
-
-  // Water light pulses strongly with playing intensity
-  waterLight.intensity = 5.0 + _audioSwell * 10.0;
+  // Ceiling for the summed displacement so layered waves can't pile up unbounded.
+  const maxDisp = norm * CFG.FLUID_CLIP;
 
   // ── Per-vertex displacement ──────────────────────────────────────
   for (let ii = 0; ii < topVtxIdx.length; ii++) {
@@ -398,40 +444,28 @@ function updateFluidDisplacement(timeMs, deltaMs) {
     const z = topOrigXZ[ii * 2 + 1];
     const r = Math.sqrt(x * x + z * z);   // radial distance from center
 
-    // ── Idle: always-on micro-motion ─────────────────────────────
-    const idle = Math.sin(x * 3.5 + t * 0.55) * Math.cos(z * 3.0 + t * 0.48) * 0.022;
+    // Idle: always-on micro-motion so the surface is never fully dead
+    const idle = Math.sin(x * 3.5 + t * 0.55) * Math.cos(z * 3.0 + t * 0.48) * 0.020;
 
-    // ── Primary swells (depth + swell energy) ────────────────────
-    const sw1 = Math.sin(x * CFG.FLUID_FREQ_X + t)
-              * Math.cos(z * CFG.FLUID_FREQ_Z + t * 0.72 + CFG.FLUID_PHASE);
-    const sw2 = Math.sin((x * 0.65 + z * 0.9) * 1.9 + t * 0.85) * 0.65;
+    // LOW — big slow rolling swells, low spatial frequency
+    const lo1 = Math.sin(x * 2.3 + t * 0.90)
+              * Math.cos(z * 1.9 + t * 0.62 + CFG.FLUID_PHASE);
+    const lo2 = Math.sin((x * 0.70 + z * 0.85) * 1.7 + t * 0.80) * 0.6;
+    const low = swellAmp * (lo1 + lo2);
 
-    // ── Organic decay envelopes ───────────────────────────────────
-    const e1 = Math.pow(Math.max(0, Math.sin(t * 0.62 + 0.00)), 2.2);
-    const e2 = Math.pow(Math.max(0, Math.sin(t * 0.79 + 2.09)), 2.2);
-    const e3 = Math.pow(Math.max(0, Math.sin(t * 0.51 + 4.19)), 2.2);
-    const e4 = Math.pow(Math.max(0, Math.sin(t * 0.94 + 1.05)), 2.2);
+    // MID — outward radial rings + medium chop, faster propagation
+    const midRing = Math.sin(r * 7.5 - t * 6.5) * Math.exp(-r * 0.8);
+    const midTex  = Math.sin(x * 6.5 + t * 3.2) * Math.cos(z * 6.0 - t * 2.8);
+    const mid = midAmp * (midRing * 0.6 + midTex * 0.4);
 
-    const rb1 = Math.sin(x *  9.0 + z *  7.0 + t * 3.3) * e1 * 0.52;
-    const rb2 = Math.cos(x *  7.0 - z * 11.0 + t * 2.9) * e2 * 0.45;
-    const rb3 = Math.sin(x * 13.0 + z *  5.5 + t * 3.8) * e3 * 0.40;
-    const rb4 = Math.cos(x *  6.0 + z * 14.0 + t * 2.5) * e4 * 0.36;
-    const micro = (Math.sin(x * 19.0 + t * 5.2) + Math.cos(z * 16.0 - t * 4.5)) * e2 * 0.10;
+    // HIGH — tight fast surface sparkle, high spatial frequency
+    const hiRing = Math.sin(r * 15.0 - t * 12.0) * Math.exp(-r * 1.1);
+    const hiTex  = (Math.sin(x * 17.0 + t * 7.5) + Math.cos(z * 15.0 - t * 6.8)) * 0.5;
+    const high = highAmp * (hiRing * 0.5 + hiTex * 0.5);
 
-    // ── Audio ripple: outward rings from center ───────────────────
-    // sin(r * k - t * speed) creates inward-→-outward propagation.
-    // exp(-r * falloff) keeps rings visible at center, vanishing at edges.
-    const ring = Math.sin(r * 6.5 - t * 7.0) * Math.exp(-r * 0.9);
-    // Cross-hatch surface texture for detail
-    const tex  = (Math.sin(x * 8.0 + t * 4.5) + Math.cos(z * 7.5 - t * 4.0)) * 0.5;
-    const ripple = rippleAmp > 0.001
-      ? rippleAmp * (ring * 0.65 + tex * 0.35)
-      : 0;
-
-    posAttr.setY(topVtxIdx[ii],
-      0.5 + idle
-           + swellAmp * (sw1 + sw2 + rb1 + rb2 + rb3 + rb4 + micro)
-           + ripple);
+    // tanh soft-clip: ~linear for small motion, smoothly limited at the peaks
+    const aud = maxDisp * Math.tanh((low + mid + high) / maxDisp);
+    posAttr.setY(topVtxIdx[ii], 0.5 + idle + aud);
   }
 
   posAttr.needsUpdate = true;
@@ -520,7 +554,16 @@ addJuceListener('setParam', (data) => {
 });
 
 addJuceListener('audioLevel', (data) => {
-  STATE.audioLevel = (data?.value ?? 0);
+  const fallback = Number(data?.value ?? 0);
+  STATE.inputLevel  = Number(data?.input  ?? fallback);
+  STATE.outputLevel = Number(data?.output ?? fallback);
+  STATE.inputPeak   = Number(data?.inputPeak  ?? STATE.inputLevel);
+  STATE.outputPeak  = Number(data?.outputPeak ?? STATE.outputLevel);
+  STATE.audioLevel  = STATE.outputLevel;
+  STATE.bandLow     = Number(data?.low  ?? 0);
+  STATE.bandMid     = Number(data?.mid  ?? 0);
+  STATE.bandHigh    = Number(data?.high ?? 0);
+  updateGainBars();
 });
 
 addJuceListener('initData', (data) => {
@@ -535,6 +578,10 @@ addJuceListener('initData', (data) => {
       opt.textContent = name;
       cabSelect.appendChild(opt);
     });
+    const loadOpt = document.createElement('option');
+    loadOpt.value = 'load';
+    loadOpt.textContent = 'LOAD FROM FILE...';
+    cabSelect.appendChild(loadOpt);
     cabSelect.selectedIndex = data.currentCab ?? 0;
   }
 
@@ -547,6 +594,10 @@ addJuceListener('initData', (data) => {
       opt.textContent = name;
       revSelect.appendChild(opt);
     });
+    const loadOpt = document.createElement('option');
+    loadOpt.value = 'load';
+    loadOpt.textContent = 'LOAD FROM FILE...';
+    revSelect.appendChild(loadOpt);
     revSelect.selectedIndex = data.currentReverb ?? 0;
   }
 
@@ -556,9 +607,11 @@ addJuceListener('initData', (data) => {
 
 // ── IO: UI → JUCE ────────────────────────────────────────────────
 listen(cabSelect, 'change', (e) => {
+  if (e.target.value === 'load') { emitToJuce('loadCabIR', {}); return; }
   emitToJuce('selectCab', { index: parseInt(e.target.value, 10) });
 });
 listen(revSelect, 'change', (e) => {
+  if (e.target.value === 'load') { emitToJuce('loadReverbIR', {}); return; }
   emitToJuce('selectReverb', { index: parseInt(e.target.value, 10) });
 });
 listen(cabToggle, 'click', () => {
